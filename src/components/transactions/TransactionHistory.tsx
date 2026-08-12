@@ -6,9 +6,11 @@ import {
   Receipt, 
   Search, 
   Download, 
-  Eye
+  Eye,
+  Printer
 } from 'lucide-react';
 import { generateInvoicePDF } from '../../utils/pdfGenerator';
+import { printPosInvoiceReceipt } from '../../utils/print';
 
 interface TransactionHistoryProps {
   settings: SchoolSettings;
@@ -175,15 +177,22 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button
+                            onClick={() => printPosInvoiceReceipt(tx, settings)}
+                            className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                            title="Direct Quick Print Receipt (A4 / Slip)"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => setSelectedTx(tx)}
-                            className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-                            title="View Receipt Modal"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                            title="View Receipt Details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => generateInvoicePDF(tx, settings)}
-                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                             title="Download PDF Invoice"
                           >
                             <Download className="w-4 h-4" />

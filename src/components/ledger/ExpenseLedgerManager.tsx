@@ -10,6 +10,7 @@ import type {
 import { db } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { printCashHandoverVoucher } from '../../utils/print';
 import { 
   DollarSign, 
   TrendingDown, 
@@ -1007,22 +1008,26 @@ export const ExpenseLedgerManager: React.FC<ExpenseLedgerManagerProps> = ({ sett
               <div className="text-[10px] text-slate-500">
                 This digital voucher constitutes an immutable legal audit record of physical cash transferred from the staff cashier to the CEO administration.
               </div>
+
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-center text-[10px] text-slate-400 font-bold">
+                developed by ai mobiles and technology • +92 311 7260898
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setViewVoucherHandover(null)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-bold text-xs"
+                className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-bold text-xs cursor-pointer"
               >
                 Close
               </button>
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow"
+                onClick={() => printCashHandoverVoucher(viewVoucherHandover, settings)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow cursor-pointer transition-all"
               >
-                <Printer className="w-3.5 h-3.5" /> Print Voucher Proof
+                <Printer className="w-3.5 h-3.5" /> Print Voucher Proof (Direct A4)
               </button>
             </div>
           </div>

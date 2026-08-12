@@ -193,42 +193,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               </div>
             </div>
 
-            {/* SUPABASE CLOUD DATA SYNC SECTION */}
-            <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Supabase Cloud Database Integration
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Connected API URL: <code className="text-emerald-300 font-mono text-[10px]">https://ektqwpnsqqnrukubnmiw.supabase.co</code>
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const res = await db.syncLocalToSupabase();
-                    alert(res.message);
-                  }}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md"
-                >
-                  Sync All Local Data to Supabase Now
-                </button>
-              </div>
-
-              <div className="p-2.5 bg-slate-800/80 rounded-xl text-[10px] text-slate-300 space-y-1 border border-slate-700">
-                <div className="font-bold text-amber-300">If your Supabase project is fresh & empty:</div>
-                <div>1. Open your <a href="https://supabase.com/dashboard/project/ektqwpnsqqnrukubnmiw/sql" target="_blank" rel="noreferrer" className="text-emerald-400 underline font-bold">Supabase SQL Editor</a>.</div>
-                <div>2. Run the DDL script in <code className="text-slate-200 font-mono">supabase_schema.sql</code> to create tables (`categories`, `products`, `transactions`, `profiles`).</div>
-                <div>3. Click <strong>"Sync All Local Data to Supabase Now"</strong> above!</div>
-              </div>
-            </div>
-
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg"
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg cursor-pointer"
               >
                 <Save className="w-4 h-4" /> Save Logo & School Details
               </button>

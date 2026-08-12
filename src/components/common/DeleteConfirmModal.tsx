@@ -4,7 +4,7 @@ import { AlertTriangle, Trash2, X } from 'lucide-react';
 interface DeleteConfirmModalProps {
   title?: string;
   itemName: string;
-  itemType: 'Product' | 'Category';
+  itemType: string;
   onConfirm: () => void;
   onCancel: () => void;
 }

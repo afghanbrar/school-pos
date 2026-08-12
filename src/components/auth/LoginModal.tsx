@@ -121,16 +121,6 @@ export const LoginModal: React.FC = () => {
           {/* 1. CEO SUPER ADMIN LOGIN */}
           {loginType === 'ceo' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-emerald-900 dark:text-emerald-300">
-                  <div className="font-bold">Chief Executive Officer Access</div>
-                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
-                    Full authority: Financial Ledgers, Cash Handover Approvals, Stock Procurement & Live Activity Stream.
-                  </div>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   CEO Official Email Address
@@ -198,16 +188,6 @@ export const LoginModal: React.FC = () => {
           {/* 2. STAFF CASHIER LOGIN */}
           {loginType === 'staff' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div className="p-3.5 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 flex items-start gap-2.5">
-                <UserCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-indigo-900 dark:text-indigo-300">
-                  <div className="font-bold">Staff Cashier Terminal Login</div>
-                  <div className="text-[11px] text-indigo-700 dark:text-indigo-400 mt-0.5">
-                    Log in to issue POS student invoices, log daily school expenses, and submit cash handovers.
-                  </div>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Staff Email Address

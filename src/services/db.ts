@@ -76,7 +76,7 @@ class DatabaseService {
       setItem(STORAGE_KEYS.USERS, users);
     } else {
       // Ensure CEO account is present in existing storage
-      const hasCeo = users.some(u => u.email === 'ceo@haidermemorial.edu.pk');
+      const hasCeo = users.some(u => u.role === 'principal');
       if (!hasCeo) {
         users.unshift(INITIAL_USERS[0]);
         setItem(STORAGE_KEYS.USERS, users);
@@ -528,6 +528,89 @@ class DatabaseService {
       'Staff Password Reset',
       `Reset password for staff member ${user.full_name} (${user.email})`,
       { staff_id: userId }
+    );
+  }
+
+  public async updateStaffUser(
+    userId: string,
+    updates: { full_name?: string; email?: string; password?: string; status?: UserStatus }
+  ): Promise<UserProfile> {
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const index = users.findIndex(u => u.id === userId);
+    if (index === -1) throw new Error('Staff account not found.');
+
+    if (updates.email) {
+      const normalizedEmail = updates.email.trim().toLowerCase();
+      const duplicate = users.find(u => u.id !== userId && u.email.toLowerCase() === normalizedEmail);
+      if (duplicate) {
+        throw new Error(`Email "${normalizedEmail}" is already in use by another user.`);
+      }
+      users[index].email = normalizedEmail;
+    }
+
+    if (updates.full_name) {
+      users[index].full_name = updates.full_name.trim();
+    }
+
+    if (updates.password) {
+      users[index].password = updates.password;
+    }
+
+    if (updates.status && users[index].role !== 'principal') {
+      users[index].status = updates.status;
+    }
+
+    setItem(STORAGE_KEYS.USERS, users);
+
+    // Sync to Supabase
+    if (this.supabase) {
+      try {
+        await this.supabase.from('profiles').update({
+          email: users[index].email,
+          full_name: users[index].full_name,
+          status: users[index].status,
+          updated_at: new Date().toISOString(),
+        }).eq('id', userId);
+      } catch (e) {
+        console.warn('Supabase staff update sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'profile_updated',
+      'Staff Account Details Updated',
+      `Updated profile for staff member ${users[index].full_name} (${users[index].email})`,
+      { staff_id: userId, email: users[index].email }
+    );
+
+    return users[index];
+  }
+
+  public async deleteStaffUser(userId: string): Promise<void> {
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const userToDelete = users.find(u => u.id === userId);
+    if (!userToDelete) throw new Error('Staff user not found.');
+
+    if (userToDelete.role === 'principal') {
+      throw new Error('CEO Super Admin account cannot be deleted.');
+    }
+
+    const filtered = users.filter(u => u.id !== userId);
+    setItem(STORAGE_KEYS.USERS, filtered);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('profiles').delete().eq('id', userId);
+      } catch (e) {
+        console.warn('Supabase staff delete sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'user_status_changed',
+      'Staff Account Deleted',
+      `Deleted staff account ${userToDelete.full_name} (${userToDelete.email}) from the system`,
+      { staff_id: userId, email: userToDelete.email }
     );
   }
 

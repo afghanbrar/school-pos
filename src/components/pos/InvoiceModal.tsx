@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Transaction, SchoolSettings } from '../../types';
 import { generateInvoicePDF } from '../../utils/pdfGenerator';
+import { printPosInvoiceReceipt } from '../../utils/print';
 import { CheckCircle2, Download, Printer, X, User, CreditCard } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -35,7 +36,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ transaction, setting
   };
 
   const handlePrint = () => {
-    window.print();
+    printPosInvoiceReceipt(transaction, settings);
   };
 
   const currency = settings.currency_symbol || 'PKR';
