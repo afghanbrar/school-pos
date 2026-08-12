@@ -18,11 +18,15 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, settings, onOpenSetti
   const getTitle = () => {
     switch (activeTab) {
       case 'pos':
-        return 'Point of Sale Terminal';
+        return 'Point of Sale Billing Terminal';
       case 'inventory':
-        return 'Inventory & Category Manager';
+        return 'Inventory & Wholesaler Procurement';
+      case 'ledger':
+        return 'Expense Deductions & Cash Handover Ledger';
+      case 'activity':
+        return 'Real-Time Operational Activity Stream';
       case 'analytics':
-        return 'Principal Analytics & Financial Dashboard';
+        return 'Executive Analytics & Financial Intelligence';
       case 'users':
         return 'Staff Account & Security Portal';
       case 'transactions':
@@ -94,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, settings, onOpenSetti
               <div className="flex items-center justify-end gap-1">
                 {isPrincipal ? (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                    <ShieldCheck className="w-3 h-3 mr-0.5" /> SUPER ADMIN
+                    <ShieldCheck className="w-3 h-3 mr-0.5" /> CEO SUPER ADMIN
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Product, Category, SchoolSettings } from '../../types';
 import { db } from '../../services/db';
+import { useAuth } from '../../context/AuthContext';
 import { 
   Package, 
   Plus, 
@@ -13,7 +14,9 @@ import {
   Layers, 
   X,
   LayoutGrid,
-  List
+  List,
+  Building,
+  CreditCard
 } from 'lucide-react';
 
 import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
@@ -24,6 +27,7 @@ interface InventoryManagerProps {
 }
 
 export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) => {
+  const { user, isPrincipal } = useAuth();
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -36,7 +40,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
   // Deletion Confirmation Modal State
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'Product' | 'Category' } | null>(null);
   
-  // Requirement 8: Grid vs List view toggle
+  // Grid vs List view toggle
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Category Modal State
@@ -58,6 +62,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
   const [prodSize, setProdSize] = useState('');
   const [prodColor, setProdColor] = useState('');
   const [prodVariant, setProdVariant] = useState('');
+
+  // Wholesaler & Purchase Payment Channel States
+  const [wholesalerName, setWholesalerName] = useState('');
+  const [wholesalerDetails, setWholesalerDetails] = useState('');
+  const [purchasePaymentChannel, setPurchasePaymentChannel] = useState('Cash');
+  const [purchasedBy, setPurchasedBy] = useState('');
+
   const [prodError, setProdError] = useState<string | null>(null);
 
   const currency = settings.currency_symbol || 'PKR';
@@ -109,6 +120,10 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
       setProdSize(productToEdit.size || '');
       setProdColor(productToEdit.color || '');
       setProdVariant(productToEdit.variant || '');
+      setWholesalerName(productToEdit.wholesaler_name || '');
+      setWholesalerDetails(productToEdit.wholesaler_details || '');
+      setPurchasePaymentChannel(productToEdit.purchase_payment_channel || 'Cash');
+      setPurchasedBy(productToEdit.purchased_by || (isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff')));
     } else {
       setEditingProductId(null);
       setProdName('');
@@ -120,6 +135,10 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
       setProdSize('');
       setProdColor('');
       setProdVariant('');
+      setWholesalerName('');
+      setWholesalerDetails('');
+      setPurchasePaymentChannel('Cash');
+      setPurchasedBy(isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff'));
     }
     setIsProductModalOpen(true);
   };
@@ -148,14 +167,18 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
         size: prodSize.trim() || undefined,
         color: prodColor.trim() || undefined,
         variant: prodVariant.trim() || undefined,
+        wholesaler_name: wholesalerName.trim() || undefined,
+        wholesaler_details: wholesalerDetails.trim() || undefined,
+        purchase_payment_channel: purchasePaymentChannel.trim() || 'Cash',
+        purchased_by: purchasedBy.trim() || (isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff')),
       };
 
       if (editingProductId) {
         await db.updateProduct(editingProductId, productPayload);
-        showToast('success', 'Product Updated', `Updated product details for "${productPayload.name}".`);
+        showToast('success', 'Product Updated', `Updated product "${productPayload.name}".`);
       } else {
         await db.addProduct(productPayload);
-        showToast('success', 'Product Created', `Added "${productPayload.name}" to inventory stock.`);
+        showToast('success', 'Product Stored', `Stored "${productPayload.name}" from ${productPayload.wholesaler_name || 'Wholesaler'}.`);
       }
 
       setIsProductModalOpen(false);
@@ -193,7 +216,11 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
 
   const filteredProducts = products.filter(p => {
     const matchesCat = selectedCategory === 'all' || p.category_id === selectedCategory;
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = 
+      p.name.toLowerCase().includes(searchLower) || 
+      p.sku.toLowerCase().includes(searchLower) ||
+      (p.wholesaler_name && p.wholesaler_name.toLowerCase().includes(searchLower));
     const matchesLowStock = !showLowStockOnly || p.quantity <= 5;
     return matchesCat && matchesSearch && matchesLowStock;
   });
@@ -203,27 +230,30 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
   const lowStockCount = products.filter(p => p.quantity <= 5).length;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-fadeIn">
       {/* Top Action Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Inventory & Category Control</h2>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Package className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            Inventory & Wholesale Stock Management
+          </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Manage textbooks, uniforms, ties, shoes, caps & sports gear stock levels.
+            Track books, uniforms, shoes & accessories with wholesaler invoices & procurement payment channels.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => { setCatError(null); setIsCategoryModalOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-2xl text-xs font-semibold shadow-sm transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-2xl text-xs font-semibold shadow-sm transition-all cursor-pointer"
           >
             <Tag className="w-4 h-4 text-emerald-400" /> Create Category
           </button>
 
           <button
             onClick={() => openProductModal()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-md hover:shadow-lg transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Store New Product
           </button>
@@ -237,7 +267,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
             <Package className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-500">Total Unique Items</div>
+            <div className="text-xs font-medium text-slate-500">Total Unique SKUs</div>
             <div className="text-xl font-extrabold text-slate-900 dark:text-white">{products.length}</div>
           </div>
         </div>
@@ -257,7 +287,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
             <DollarSign className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-500">Total Asset Cost Value</div>
+            <div className="text-xs font-medium text-slate-500">Inventory Cost Value</div>
             <div className="text-xl font-extrabold text-slate-900 dark:text-white">{currency} {totalCostAssetValue.toLocaleString()}</div>
           </div>
         </div>
@@ -273,15 +303,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
         </div>
       </div>
 
-      {/* Requirement 8: CATEGORIES VISIBLE IN 2 ROWS & GRID/LIST VIEW TOGGLE */}
+      {/* Categories & Search Controls */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        {/* Top Controls: Search, Low Stock, & Grid/List View Toggle */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           <div className="relative flex-1 md:w-80">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search product or SKU..."
+              placeholder="Search product, SKU or wholesaler..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white"
@@ -291,7 +320,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
                 showLowStockOnly
                   ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300'
                   : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
@@ -300,43 +329,42 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
               Low Stock Only
             </button>
 
-            {/* Requirement 8: GRID / LIST VIEW TOGGLE BUTTON */}
             <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewMode === 'grid'
                     ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
                 title="Grid View"
               >
-                <LayoutGrid className="w-3.5 h-3.5" /> Grid View
+                <LayoutGrid className="w-3.5 h-3.5" /> Grid
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewMode === 'list'
                     ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
                 title="List View"
               >
-                <List className="w-3.5 h-3.5" /> List View
+                <List className="w-3.5 h-3.5" /> List
               </button>
             </div>
           </div>
         </div>
 
-        {/* Requirement 8: CATEGORIES ARRANGED IN EXACTLY 2 ROWS */}
+        {/* Categories Bar */}
         <div>
           <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-            Categories (Organized in 2 Rows)
+            Categories ({categories.length})
           </div>
           <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               onClick={() => setSelectedCategory('all')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === 'all'
                   ? 'bg-slate-900 text-white dark:bg-emerald-600 shadow-md'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
@@ -371,7 +399,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
         </div>
       </div>
 
-      {/* Requirement 8: PRODUCTS DYNAMIC DISPLAY - GRID OR LIST VIEW */}
+      {/* PRODUCTS DISPLAY - LIST OR GRID */}
       {viewMode === 'grid' ? (
         /* GRID VIEW DISPLAY */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -389,7 +417,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
               return (
                 <div
                   key={product.id}
-                  className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-all"
+                  className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-all space-y-3"
                 >
                   <div>
                     <div className="flex items-center justify-between gap-1 mb-2">
@@ -422,9 +450,25 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                       {product.size && <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">{product.size}</span>}
                       {product.color && <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">{product.color}</span>}
                     </div>
+
+                    {/* Wholesaler & Payment Details */}
+                    {product.wholesaler_name && (
+                      <div className="mt-3 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-700/60 text-[10px] space-y-1">
+                        <div className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
+                          <Building className="w-3 h-3 text-emerald-600" />
+                          <span className="truncate">{product.wholesaler_name}</span>
+                        </div>
+                        {product.purchase_payment_channel && (
+                          <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                            <CreditCard className="w-3 h-3 text-indigo-500" />
+                            <span>Paid via: <strong>{product.purchase_payment_channel}</strong></span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <div>
                       <div className="text-[10px] text-slate-400">Cost: {currency} {product.cost_price.toLocaleString()}</div>
                       <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
@@ -435,14 +479,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => openProductModal(product)}
-                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                         title="Edit Product"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handlePromptDeleteProduct(product.id, product.name)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg transition-colors cursor-pointer"
                         title="Delete Product"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -455,27 +499,27 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
           )}
         </div>
       ) : (
-        /* LIST / TABLE VIEW DISPLAY */
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+        /* LIST VIEW TABLE DISPLAY WITH WHOLESALER & PAYMENT INFO */
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="p-4">SKU / Code</th>
-                  <th className="p-4">Product Name</th>
-                  <th className="p-4">Category</th>
-                  <th className="p-4">Variants (Size / Color)</th>
-                  <th className="p-4 text-right">Cost Price</th>
-                  <th className="p-4 text-right">Sale Price</th>
-                  <th className="p-4 text-center">Stock Qty</th>
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="py-3.5 px-4">Item SKU / Name</th>
+                  <th className="py-3.5 px-4">Category</th>
+                  <th className="py-3.5 px-4">Wholesaler & Contact</th>
+                  <th className="py-3.5 px-4">Procurement Channel</th>
+                  <th className="py-3.5 px-4 text-right">Cost Price</th>
+                  <th className="py-3.5 px-4 text-right">Sale Price</th>
+                  <th className="py-3.5 px-4 text-center">Stock</th>
+                  <th className="py-3.5 px-4 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 text-xs">
-                      No inventory items found matching filters.
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                      No products found matching your search.
                     </td>
                   </tr>
                 ) : (
@@ -485,65 +529,103 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                     const isOut = product.quantity <= 0;
 
                     return (
-                      <tr key={product.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="p-4 font-mono font-semibold text-slate-500 dark:text-slate-400">
-                          {product.sku}
+                      <tr key={product.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                        {/* Name & SKU */}
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 dark:text-white">{product.name}</div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="font-mono text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded">
+                              {product.sku}
+                            </span>
+                            {product.size && <span className="text-[10px] text-slate-400">• Size: {product.size}</span>}
+                            {product.color && <span className="text-[10px] text-slate-400">• {product.color}</span>}
+                          </div>
                         </td>
-                        <td className="p-4 font-bold text-slate-900 dark:text-white">
-                          {product.name}
-                          {product.variant && <div className="text-[10px] font-normal text-slate-400">{product.variant}</div>}
-                        </td>
-                        <td className="p-4">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {category?.name || 'General'}
+
+                        {/* Category */}
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            {category?.name || 'Uncategorized'}
                           </span>
                         </td>
-                        <td className="p-4 text-slate-500">
-                          {product.size || product.color ? (
-                            <div className="flex items-center gap-1.5 text-[11px]">
-                              {product.size && <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{product.size}</span>}
-                              {product.color && <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{product.color}</span>}
+
+                        {/* Wholesaler Details */}
+                        <td className="py-3 px-4 max-w-[200px]">
+                          {product.wholesaler_name ? (
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1">
+                                <Building className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span className="truncate">{product.wholesaler_name}</span>
+                              </div>
+                              {product.wholesaler_details && (
+                                <div className="text-[10px] text-slate-400 truncate" title={product.wholesaler_details}>
+                                  {product.wholesaler_details}
+                                </div>
+                              )}
                             </div>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-400 text-[10px] italic">Not specified</span>
                           )}
                         </td>
-                        <td className="p-4 text-right text-slate-600 dark:text-slate-400">
-                          {currency} {product.cost_price.toLocaleString()}
-                        </td>
-                        <td className="p-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400">
-                          {currency} {product.sale_price.toLocaleString()}
-                        </td>
-                        <td className="p-4 text-center">
-                          {isOut ? (
-                            <span className="px-2 py-1 bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 text-[10px] font-bold rounded-full">
-                              0 (Out of Stock)
-                            </span>
-                          ) : isLow ? (
-                            <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[11px] font-extrabold rounded-full animate-pulse">
-                              {product.quantity} units (Low)
+
+                        {/* Procurement Payment Channel */}
+                        <td className="py-3 px-4">
+                          {product.purchase_payment_channel ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              <CreditCard className="w-3 h-3" />
+                              {product.purchase_payment_channel}
                             </span>
                           ) : (
-                            <span className="font-bold text-slate-800 dark:text-white">
+                            <span className="text-slate-400 text-[10px]">Cash</span>
+                          )}
+                          {product.purchased_by && (
+                            <div className="text-[9px] text-slate-400 mt-0.5">By: {product.purchased_by}</div>
+                          )}
+                        </td>
+
+                        {/* Cost Price */}
+                        <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300 font-mono">
+                          {currency} {product.cost_price.toLocaleString()}
+                        </td>
+
+                        {/* Sale Price */}
+                        <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
+                          {currency} {product.sale_price.toLocaleString()}
+                        </td>
+
+                        {/* Stock Quantity Status */}
+                        <td className="py-3 px-4 text-center">
+                          {isOut ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                              OUT (0)
+                            </span>
+                          ) : isLow ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                              LOW ({product.quantity})
+                            </span>
+                          ) : (
+                            <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
                               {product.quantity}
                             </span>
                           )}
                         </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => openProductModal(product)}
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                               title="Edit Product"
                             >
-                              <Edit3 className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handlePromptDeleteProduct(product.id, product.name)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg transition-colors cursor-pointer"
                               title="Delete Product"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -557,123 +639,63 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
         </div>
       )}
 
-      {/* CREATE CATEGORY MODAL */}
-      {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Tag className="w-5 h-5 text-emerald-600" /> Create Category
-              </h3>
-              <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {catError && (
-              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl">{catError}</div>
-            )}
-
-            <form onSubmit={handleCreateCategory} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Category Name * (e.g. Books, Uniforms, Scarves, Shoes, Ties, Caps, Sports gear)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sports Equipment"
-                  value={newCatName}
-                  onChange={e => setNewCatName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Description (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Short description of items under this category..."
-                  value={newCatDesc}
-                  onChange={e => setNewCatDesc(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700"
-                >
-                  Save Category
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* PRODUCT ADD / EDIT MODAL */}
+      {/* PRODUCT ADD / EDIT MODAL WITH WHOLESALER & PAYMENT FIELDS */}
       {isProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-y-auto max-h-[90vh]">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-emerald-600" /> 
-                {editingProductId ? 'Edit Product Details' : 'Store New Product in Inventory'}
+                {editingProductId ? 'Edit Product & Wholesaler Info' : 'Store New Inventory Stock & Wholesaler Details'}
               </h3>
-              <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-xl cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {prodError && (
-              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl">{prodError}</div>
+              <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-2 text-rose-700 dark:text-rose-300 text-xs animate-shake">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                <div>{prodError}</div>
+              </div>
             )}
 
             <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Product Name *</label>
+              {/* Product Basic Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Product Title *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Oxford Mathematics Book 9"
+                    placeholder="e.g. Oxford English Literature Grade 9"
                     value={prodName}
                     onChange={e => setProdName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
                   />
                 </div>
 
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">SKU / Barcode *</label>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">SKU / Barcode *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. BK-MATH-09"
+                    placeholder="e.g. BK-ENG-09"
                     value={prodSku}
                     onChange={e => setProdSku(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white font-mono"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-mono"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Category, Quantity, Cost & Sale Price */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Category *</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Category *</label>
                   <select
                     value={prodCatId}
                     onChange={e => setProdCatId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
                   >
                     {categories.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
@@ -682,51 +704,121 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Quantity in Stock *</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Stock Qty *</label>
                   <input
                     type="number"
                     min="0"
                     required
-                    placeholder="e.g. 50"
+                    placeholder="50"
                     value={prodQty}
                     onChange={e => setProdQty(e.target.value === '' ? '' : parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white font-bold"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-bold text-indigo-600 dark:text-indigo-400"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cost Price ({currency}) *</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Cost Price ({currency}) *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     required
-                    placeholder="e.g. 500"
+                    placeholder="500"
                     value={prodCostPrice}
                     onChange={e => setProdCostPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sale Price ({currency}) *</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Sale Price ({currency}) *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     required
-                    placeholder="e.g. 850"
+                    placeholder="850"
                     value={prodSalePrice}
                     onChange={e => setProdSalePrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white font-extrabold text-emerald-600 dark:text-emerald-400"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-extrabold text-emerald-600 dark:text-emerald-400 font-mono"
                   />
                 </div>
               </div>
 
+              {/* WHOLESALER & PURCHASE TRANSACTION DETAILS SECTION */}
+              <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 dark:text-emerald-300">
+                  <Building className="w-4 h-4 text-emerald-600" />
+                  Wholesaler Procurement & Payment Channel Details
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                      Wholesaler / Vendor Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Al-Madina School Uniform Wholesale"
+                      value={wholesalerName}
+                      onChange={e => setWholesalerName(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-xs dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                      Purchase Payment Channel
+                    </label>
+                    <select
+                      value={purchasePaymentChannel}
+                      onChange={e => setPurchasePaymentChannel(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-xs dark:text-white font-semibold"
+                    >
+                      <option value="Cash">Cash on Delivery / Direct Cash</option>
+                      <option value="Bank Transfer (Meezan Bank)">Bank Transfer (Meezan Bank)</option>
+                      <option value="Bank Transfer (Habib Bank Ltd)">Bank Transfer (Habib Bank Ltd)</option>
+                      <option value="Bank Transfer (Other)">Bank Transfer (Other Commercial Bank)</option>
+                      <option value="EasyPaisa">EasyPaisa</option>
+                      <option value="JazzCash">JazzCash</option>
+                      <option value="Company Cheque">Company Cheque</option>
+                      <option value="Company Account (Credit)">Company Account (Credit / Pay Later)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                      Wholesaler Contact / Address / Invoice Ref
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Urdu Bazaar Lahore • Inv #OUP-9821 • Ph: 0300-1234567"
+                      value={wholesalerDetails}
+                      onChange={e => setWholesalerDetails(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-xs dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                      Purchased / Stocked By
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CEO Office / Ahmed Hassan"
+                      value={purchasedBy}
+                      onChange={e => setPurchasedBy(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-xs dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Variants Section */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
-                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Variants & Specifications</span>
+                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Optional Item Variants</span>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <input
@@ -749,7 +841,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                   <div>
                     <input
                       type="text"
-                      placeholder="Variant (e.g. Cotton)"
+                      placeholder="Variant (e.g. Edition 2026)"
                       value={prodVariant}
                       onChange={e => setProdVariant(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-xs dark:text-white"
@@ -758,10 +850,72 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                 </div>
               </div>
 
+              {/* Action Buttons */}
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+                >
+                  {editingProductId ? 'Update Product' : 'Store Product in Stock'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE CATEGORY MODAL */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Tag className="w-5 h-5 text-emerald-600" /> Create New Inventory Category
+              </h3>
+              <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {catError && (
+              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl">{catError}</div>
+            )}
+
+            <form onSubmit={handleCreateCategory} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Science Lab Supplies"
+                  value={newCatName}
+                  onChange={e => setNewCatName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description (Optional)</label>
+                <textarea
+                  rows={3}
+                  placeholder="Short description of items in this category"
+                  value={newCatDesc}
+                  onChange={e => setNewCatDesc(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(false)}
                   className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-semibold"
                 >
                   Cancel
@@ -770,7 +924,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                   type="submit"
                   className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700"
                 >
-                  {editingProductId ? 'Update Product' : 'Save Product'}
+                  Save Category
                 </button>
               </div>
             </form>

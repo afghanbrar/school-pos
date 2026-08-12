@@ -8,10 +8,12 @@ import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { PosTerminal } from './components/pos/PosTerminal';
 import { InventoryManager } from './components/inventory/InventoryManager';
+import { ExpenseLedgerManager } from './components/ledger/ExpenseLedgerManager';
 import { CustomerManagement } from './components/customers/CustomerManagement';
 import { UserManagement } from './components/users/UserManagement';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard';
 import { TransactionHistory } from './components/transactions/TransactionHistory';
+import { RecentActivityFeed } from './components/activity/RecentActivityFeed';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ProfileModal } from './components/profile/ProfileModal';
 import type { SchoolSettings } from './types';
@@ -62,8 +64,10 @@ const MainAppContent: React.FC = () => {
         <main className="flex-1 h-full overflow-y-auto">
           {activeTab === 'pos' && <PosTerminal settings={settings} />}
           {activeTab === 'inventory' && <InventoryManager settings={settings} />}
+          {activeTab === 'ledger' && <ExpenseLedgerManager settings={settings} />}
           {activeTab === 'customers' && <CustomerManagement settings={settings} />}
           {activeTab === 'transactions' && <TransactionHistory settings={settings} />}
+          {activeTab === 'activity' && <RecentActivityFeed settings={settings} />}
           {activeTab === 'analytics' && <AnalyticsDashboard settings={settings} />}
           {activeTab === 'users' && <UserManagement />}
         </main>

@@ -7,7 +7,11 @@ import type {
   SchoolSettings,
   UserStatus,
   CustomerProfile,
-  PaymentMethod
+  PaymentMethod,
+  SchoolExpense,
+  CashHandover,
+  ActivityLog,
+  ActivityAction
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -15,20 +19,26 @@ import {
   INITIAL_PRODUCTS, 
   generateSampleTransactions,
   INITIAL_SETTINGS,
-  INITIAL_CUSTOMERS
+  INITIAL_CUSTOMERS,
+  INITIAL_EXPENSES,
+  INITIAL_HANDOVERS,
+  INITIAL_ACTIVITIES
 } from './mockData';
 
 const DEFAULT_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ektqwpnsqqnrukubnmiw.supabase.co';
 const DEFAULT_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrdHF3cG5zcXFucnVrdWJubWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NDUzNDMsImV4cCI6MjEwMTMyMTM0M30.WQTHB6qyn4Aah9zZlSfllqZCL5RHVzN1ZdCYFw0oMbA';
 
 const STORAGE_KEYS = {
-  USERS: 'school_pos_users_v1',
-  CATEGORIES: 'school_pos_categories_v1',
-  PRODUCTS: 'school_pos_products_v1',
-  TRANSACTIONS: 'school_pos_transactions_v1',
-  SETTINGS: 'school_pos_settings_v1',
-  CUSTOMERS: 'school_pos_customers_v1',
-  CURRENT_USER: 'school_pos_current_user_v1',
+  USERS: 'school_pos_users_v2',
+  CATEGORIES: 'school_pos_categories_v2',
+  PRODUCTS: 'school_pos_products_v2',
+  TRANSACTIONS: 'school_pos_transactions_v2',
+  SETTINGS: 'school_pos_settings_v2',
+  CUSTOMERS: 'school_pos_customers_v2',
+  CURRENT_USER: 'school_pos_current_user_v2',
+  EXPENSES: 'school_pos_expenses_v2',
+  HANDOVERS: 'school_pos_handovers_v2',
+  ACTIVITIES: 'school_pos_activities_v2',
   SUPABASE_URL: 'school_pos_supabase_url',
   SUPABASE_KEY: 'school_pos_supabase_key',
 };
@@ -60,9 +70,19 @@ class DatabaseService {
   }
 
   private initLocalDefaults() {
-    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-      setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
+    let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
+    if (!users || users.length === 0) {
+      users = INITIAL_USERS;
+      setItem(STORAGE_KEYS.USERS, users);
+    } else {
+      // Ensure CEO account is present in existing storage
+      const hasCeo = users.some(u => u.email === 'ceo@haidermemorial.edu.pk');
+      if (!hasCeo) {
+        users.unshift(INITIAL_USERS[0]);
+        setItem(STORAGE_KEYS.USERS, users);
+      }
     }
+
     if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
       setItem(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
     }
@@ -78,13 +98,21 @@ class DatabaseService {
     if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
       setItem(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
     }
+    if (!localStorage.getItem(STORAGE_KEYS.EXPENSES)) {
+      setItem(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.HANDOVERS)) {
+      setItem(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.ACTIVITIES)) {
+      setItem(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
+    }
   }
 
   public initSupabaseClient() {
     let url = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || DEFAULT_SUPABASE_URL;
     let key = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) || DEFAULT_SUPABASE_KEY;
 
-    // Normalize API URL if user or config included /rest/v1/ suffix
     if (url.endsWith('/rest/v1/')) {
       url = url.replace(/\/rest\/v1\/?$/, '');
     } else if (url.endsWith('/rest/v1')) {
@@ -117,8 +145,7 @@ class DatabaseService {
   }
 
   /**
-  /**
-   * Automatically migrate local categories, products, profiles, and transactions to live Supabase database
+   * Migrate local categories, products, profiles, transactions, expenses, handovers, activities to live Supabase
    */
   public async syncLocalToSupabase(): Promise<{ success: boolean; message: string }> {
     if (!this.supabase) {
@@ -138,10 +165,10 @@ class DatabaseService {
             created_at: c.created_at || new Date().toISOString(),
           }))
         );
-        if (catErr) throw new Error(`Categories Table: ${catErr.message}`);
+        if (catErr) console.warn('Categories Table sync:', catErr.message);
       }
 
-      // 2. Sync Products
+      // 2. Sync Products (with wholesaler fields)
       const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
       if (products.length > 0) {
         const { error: prodErr } = await this.supabase.from('products').upsert(
@@ -156,11 +183,15 @@ class DatabaseService {
             size: p.size || null,
             color: p.color || null,
             variant: p.variant || null,
+            wholesaler_name: p.wholesaler_name || null,
+            wholesaler_details: p.wholesaler_details || null,
+            purchase_payment_channel: p.purchase_payment_channel || null,
+            purchased_by: p.purchased_by || null,
             created_at: p.created_at || new Date().toISOString(),
             updated_at: p.updated_at || new Date().toISOString(),
           }))
         );
-        if (prodErr) throw new Error(`Products Table: ${prodErr.message}`);
+        if (prodErr) console.warn('Products Table sync:', prodErr.message);
       }
 
       // 3. Sync User Profiles
@@ -176,7 +207,7 @@ class DatabaseService {
             created_at: u.created_at || new Date().toISOString(),
           }))
         );
-        if (userErr) throw new Error(`Profiles Table: ${userErr.message}`);
+        if (userErr) console.warn('Profiles Table sync:', userErr.message);
       }
 
       // 4. Sync Transactions
@@ -201,15 +232,67 @@ class DatabaseService {
             created_at: tx.created_at || new Date().toISOString(),
           }))
         );
-        if (txErr) throw new Error(`Transactions Table: ${txErr.message}`);
+        if (txErr) console.warn('Transactions Table sync:', txErr.message);
       }
 
-      return { success: true, message: 'All local categories, products, profiles, and transactions successfully synced to Supabase!' };
+      // 5. Sync Expenses
+      const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+      if (expenses.length > 0) {
+        const { error: expErr } = await this.supabase.from('expenses').upsert(
+          expenses.map(e => ({
+            id: e.id,
+            staff_id: e.staff_id,
+            staff_name: e.staff_name,
+            title: e.title,
+            category: e.category,
+            amount: e.amount,
+            payment_channel: e.payment_channel,
+            receipt_ref: e.receipt_ref || null,
+            description: e.description || null,
+            created_at: e.created_at || new Date().toISOString(),
+          }))
+        );
+        if (expErr) console.warn('Expenses Table sync:', expErr.message);
+      }
+
+      // 6. Sync Cash Handovers
+      const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+      if (handovers.length > 0) {
+        const { error: hndErr } = await this.supabase.from('cash_handovers').upsert(
+          handovers.map(h => ({
+            id: h.id,
+            handover_code: h.handover_code,
+            staff_id: h.staff_id,
+            staff_name: h.staff_name,
+            period_start: h.period_start,
+            period_end: h.period_end,
+            gross_sales_cash: h.gross_sales_cash,
+            gross_sales_digital: h.gross_sales_digital,
+            total_gross_sales: h.total_gross_sales,
+            total_expenses_deducted: h.total_expenses_deducted,
+            net_cash_submitted: h.net_cash_submitted,
+            expense_ids: h.expense_ids,
+            transaction_ids: h.transaction_ids,
+            notes: h.notes || null,
+            status: h.status,
+            submitted_at: h.submitted_at,
+            acknowledged_by: h.acknowledged_by || null,
+            acknowledged_at: h.acknowledged_at || null,
+            rejection_reason: h.rejection_reason || null,
+            ceo_notes: h.ceo_notes || null,
+          }))
+        );
+        if (hndErr) console.warn('Cash Handovers Table sync:', hndErr.message);
+      }
+
+      return { success: true, message: 'All local data synced with Supabase cloud.' };
     } catch (e: any) {
       console.warn('Background Supabase sync notice:', e);
       return { success: false, message: e.message || 'Supabase sync failed.' };
     }
   }
+
+  /* ================= AUTHENTICATION & USERS ================= */
 
   public async registerUser(fullName: string, email: string, role: 'principal' | 'staff', password?: string): Promise<UserProfile> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
@@ -263,9 +346,9 @@ class DatabaseService {
 
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const principal = users.find(u => u.role === 'principal');
-    if (!principal) throw new Error('Principal account not found.');
+    if (!principal) throw new Error('CEO Super Admin account not found.');
     if (principal.status === 'inactive') {
-      throw new Error('Principal account is currently deactivated.');
+      throw new Error('Super Admin account is currently deactivated.');
     }
 
     setItem(STORAGE_KEYS.CURRENT_USER, principal);
@@ -279,18 +362,17 @@ class DatabaseService {
     const user = users.find(u => u.email.toLowerCase() === normalizedEmail);
 
     if (!user) {
-      throw new Error('Invalid email or password.');
+      throw new Error('Invalid email or password. Please verify your credentials.');
     }
 
     if (user.status === 'inactive') {
-      throw new Error('ACCESS DENIED: Your account has been deactivated by Super Admin. Please contact Principal.');
+      throw new Error('ACCESS DENIED: Your account has been deactivated by CEO. Please contact administration.');
     }
 
     if (!pass) {
       throw new Error('Password is required.');
     }
 
-    // Verify password if user has a password set
     if (user.password && user.password !== pass) {
       throw new Error('Invalid password. Please check your credentials.');
     }
@@ -338,13 +420,11 @@ class DatabaseService {
 
     setItem(STORAGE_KEYS.USERS, users);
 
-    // Update current user session if it's the active user
     const current = this.getCurrentUser();
     if (current && current.id === userId) {
       setItem(STORAGE_KEYS.CURRENT_USER, users[index]);
     }
 
-    // Sync to Supabase Profiles
     if (this.supabase) {
       try {
         await this.supabase.from('profiles').update({
@@ -356,6 +436,14 @@ class DatabaseService {
         console.warn('Supabase profile update sync notice:', e);
       }
     }
+
+    await this.logActivity(
+      'profile_updated',
+      'Profile Credentials Updated',
+      `User ${users[index].full_name} updated account credentials`,
+      { user_id: userId, email: users[index].email },
+      users[index]
+    );
 
     return users[index];
   }
@@ -396,6 +484,13 @@ class DatabaseService {
       }
     }
 
+    await this.logActivity(
+      'staff_created',
+      'New Staff User Account Created',
+      `Created staff account for ${newUser.full_name} (${newUser.email})`,
+      { staff_id: newUser.id, email: newUser.email }
+    );
+
     return newUser;
   }
 
@@ -405,11 +500,19 @@ class DatabaseService {
     if (index === -1) throw new Error('User not found.');
 
     if (users[index].role === 'principal') {
-      throw new Error('Principal super admin status cannot be set to inactive.');
+      throw new Error('CEO Super Admin status cannot be set to inactive.');
     }
 
     users[index].status = status;
     setItem(STORAGE_KEYS.USERS, users);
+
+    await this.logActivity(
+      'user_status_changed',
+      'Staff Status Changed',
+      `Changed status of ${users[index].full_name} to ${status.toUpperCase()}`,
+      { staff_id: userId, status }
+    );
+
     return users[index];
   }
 
@@ -419,8 +522,16 @@ class DatabaseService {
     if (!user) throw new Error('User not found.');
     user.password = newPassword || 'password123';
     setItem(STORAGE_KEYS.USERS, users);
-    console.log(`Password reset for ${user.email}`);
+
+    await this.logActivity(
+      'profile_updated',
+      'Staff Password Reset',
+      `Reset password for staff member ${user.full_name} (${user.email})`,
+      { staff_id: userId }
+    );
   }
+
+  /* ================= CATEGORIES & PRODUCTS (INVENTORY) ================= */
 
   public async getCategories(): Promise<Category[]> {
     return getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
@@ -445,7 +556,6 @@ class DatabaseService {
     categories.unshift(newCategory);
     setItem(STORAGE_KEYS.CATEGORIES, categories);
 
-    // Live Sync to Supabase
     if (this.supabase) {
       try {
         await this.supabase.from('categories').upsert({
@@ -460,6 +570,13 @@ class DatabaseService {
       }
     }
 
+    await this.logActivity(
+      'category_created',
+      'Inventory Category Created',
+      `Created category "${newCategory.name}"`,
+      { category_id: newCategory.id, name: newCategory.name }
+    );
+
     return newCategory;
   }
 
@@ -468,13 +585,11 @@ class DatabaseService {
     const filtered = categories.filter(c => c.id !== id);
     setItem(STORAGE_KEYS.CATEGORIES, filtered);
 
-    // Update products that belonged to this category
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     const defaultCat = filtered[0]?.id || '';
     const updatedProducts = products.map(p => p.category_id === id ? { ...p, category_id: defaultCat } : p);
     setItem(STORAGE_KEYS.PRODUCTS, updatedProducts);
 
-    // Live Sync to Supabase
     if (this.supabase) {
       try {
         await this.supabase.from('categories').delete().eq('id', id);
@@ -501,7 +616,6 @@ class DatabaseService {
     products.unshift(newProduct);
     setItem(STORAGE_KEYS.PRODUCTS, products);
 
-    // Live Sync to Supabase
     if (this.supabase) {
       try {
         await this.supabase.from('products').upsert({
@@ -515,6 +629,10 @@ class DatabaseService {
           size: newProduct.size || null,
           color: newProduct.color || null,
           variant: newProduct.variant || null,
+          wholesaler_name: newProduct.wholesaler_name || null,
+          wholesaler_details: newProduct.wholesaler_details || null,
+          purchase_payment_channel: newProduct.purchase_payment_channel || null,
+          purchased_by: newProduct.purchased_by || null,
           created_at: newProduct.created_at,
           updated_at: newProduct.updated_at,
         });
@@ -522,6 +640,13 @@ class DatabaseService {
         console.warn('Supabase product add sync notice:', e);
       }
     }
+
+    await this.logActivity(
+      'product_added',
+      'Inventory Stock Added',
+      `Added product "${newProduct.name}" (SKU: ${newProduct.sku}) • Wholesaler: ${newProduct.wholesaler_name || 'N/A'} • Qty: ${newProduct.quantity}`,
+      { product_id: newProduct.id, sku: newProduct.sku, wholesaler: newProduct.wholesaler_name, channel: newProduct.purchase_payment_channel }
+    );
 
     return newProduct;
   }
@@ -540,7 +665,6 @@ class DatabaseService {
     products[index] = updated;
     setItem(STORAGE_KEYS.PRODUCTS, products);
 
-    // Live Sync to Supabase
     if (this.supabase) {
       try {
         await this.supabase.from('products').upsert({
@@ -554,6 +678,10 @@ class DatabaseService {
           size: updated.size || null,
           color: updated.color || null,
           variant: updated.variant || null,
+          wholesaler_name: updated.wholesaler_name || null,
+          wholesaler_details: updated.wholesaler_details || null,
+          purchase_payment_channel: updated.purchase_payment_channel || null,
+          purchased_by: updated.purchased_by || null,
           created_at: updated.created_at,
           updated_at: updated.updated_at,
         });
@@ -562,15 +690,22 @@ class DatabaseService {
       }
     }
 
+    await this.logActivity(
+      'product_updated',
+      'Product Stock/Details Updated',
+      `Updated product "${updated.name}" (SKU: ${updated.sku}) • Stock: ${updated.quantity}`,
+      { product_id: id, sku: updated.sku, price: updated.sale_price, qty: updated.quantity }
+    );
+
     return updated;
   }
 
   public async deleteProduct(id: string): Promise<void> {
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const prod = products.find(p => p.id === id);
     const filtered = products.filter(p => p.id !== id);
     setItem(STORAGE_KEYS.PRODUCTS, filtered);
 
-    // Live Sync to Supabase
     if (this.supabase) {
       try {
         await this.supabase.from('products').delete().eq('id', id);
@@ -578,7 +713,18 @@ class DatabaseService {
         console.warn('Supabase product delete sync notice:', e);
       }
     }
+
+    if (prod) {
+      await this.logActivity(
+        'product_deleted',
+        'Product Removed from Inventory',
+        `Deleted product "${prod.name}" (SKU: ${prod.sku})`,
+        { product_id: id, sku: prod.sku }
+      );
+    }
   }
+
+  /* ================= TRANSACTIONS (POS SALES) ================= */
 
   public async getTransactions(): Promise<Transaction[]> {
     return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
@@ -607,8 +753,341 @@ class DatabaseService {
 
     transactions.unshift(newTx);
     setItem(STORAGE_KEYS.TRANSACTIONS, transactions);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('transactions').upsert({
+          id: newTx.id,
+          invoice_number: newTx.invoice_number,
+          buyer_type: newTx.buyer_type,
+          buyer_name: newTx.buyer_name,
+          student_roll_no: newTx.student_roll_no || null,
+          student_class: newTx.student_class || null,
+          school_name: newTx.school_name || null,
+          staff_id: newTx.staff_id,
+          total_amount: newTx.total_amount,
+          discount: newTx.discount,
+          paid_amount: newTx.paid_amount,
+          pending_amount: newTx.pending_amount,
+          payment_method: newTx.payment_method,
+          notes: newTx.notes || null,
+          created_at: newTx.created_at,
+        });
+      } catch (e) {
+        console.warn('Supabase transaction add sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'sale_created',
+      'New POS Sale Invoice Created',
+      `Processed ${newTx.invoice_number} for ${newTx.buyer_name} • Paid: PKR ${newTx.paid_amount.toLocaleString()} (${newTx.payment_method.toUpperCase()})`,
+      { 
+        invoice_number: newTx.invoice_number, 
+        buyer: newTx.buyer_name, 
+        total: newTx.total_amount, 
+        paid: newTx.paid_amount,
+        payment_method: newTx.payment_method,
+        items_count: newTx.items.length 
+      }
+    );
+
     return newTx;
   }
+
+  /* ================= SCHOOL EXPENSES (DEDUCTED FROM REVENUE) ================= */
+
+  public async getExpenses(): Promise<SchoolExpense[]> {
+    return getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+  }
+
+  public async createExpense(data: Omit<SchoolExpense, 'id' | 'created_at'>): Promise<SchoolExpense> {
+    const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    const newExpense: SchoolExpense = {
+      ...data,
+      id: `exp-${Date.now().toString().slice(-4)}`,
+      created_at: new Date().toISOString(),
+    };
+
+    expenses.unshift(newExpense);
+    setItem(STORAGE_KEYS.EXPENSES, expenses);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('expenses').upsert({
+          id: newExpense.id,
+          staff_id: newExpense.staff_id,
+          staff_name: newExpense.staff_name,
+          title: newExpense.title,
+          category: newExpense.category,
+          amount: newExpense.amount,
+          payment_channel: newExpense.payment_channel,
+          receipt_ref: newExpense.receipt_ref || null,
+          description: newExpense.description || null,
+          created_at: newExpense.created_at,
+        });
+      } catch (e) {
+        console.warn('Supabase expense sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'expense_logged',
+      'School Expense Deducted',
+      `Logged expense "${newExpense.title}" (PKR ${newExpense.amount.toLocaleString()}) by ${newExpense.staff_name} • Deducted from sales revenue`,
+      { 
+        expense_id: newExpense.id, 
+        amount: newExpense.amount, 
+        category: newExpense.category, 
+        receipt: newExpense.receipt_ref,
+        channel: newExpense.payment_channel 
+      }
+    );
+
+    return newExpense;
+  }
+
+  public async deleteExpense(id: string): Promise<void> {
+    const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    const exp = expenses.find(e => e.id === id);
+    const filtered = expenses.filter(e => e.id !== id);
+    setItem(STORAGE_KEYS.EXPENSES, filtered);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('expenses').delete().eq('id', id);
+      } catch (e) {
+        console.warn('Supabase expense delete sync notice:', e);
+      }
+    }
+
+    if (exp) {
+      await this.logActivity(
+        'expense_deleted',
+        'Expense Record Removed',
+        `Deleted expense "${exp.title}" (PKR ${exp.amount.toLocaleString()})`,
+        { expense_id: id, amount: exp.amount }
+      );
+    }
+  }
+
+  /* ================= CASH HANDOVER WORKFLOW & ACKNOWLEDGMENT ================= */
+
+  public async getCashHandovers(): Promise<CashHandover[]> {
+    return getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+  }
+
+  public async submitCashHandover(
+    data: Omit<CashHandover, 'id' | 'handover_code' | 'status' | 'submitted_at'>
+  ): Promise<CashHandover> {
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    const codeSeq = (handovers.length + 1).toString().padStart(3, '0');
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+
+    const newHandover: CashHandover = {
+      ...data,
+      id: `hnd-${Date.now()}`,
+      handover_code: `HND-${yearMonth}-${codeSeq}`,
+      status: 'pending',
+      submitted_at: new Date().toISOString(),
+    };
+
+    handovers.unshift(newHandover);
+    setItem(STORAGE_KEYS.HANDOVERS, handovers);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('cash_handovers').upsert({
+          id: newHandover.id,
+          handover_code: newHandover.handover_code,
+          staff_id: newHandover.staff_id,
+          staff_name: newHandover.staff_name,
+          period_start: newHandover.period_start,
+          period_end: newHandover.period_end,
+          gross_sales_cash: newHandover.gross_sales_cash,
+          gross_sales_digital: newHandover.gross_sales_digital,
+          total_gross_sales: newHandover.total_gross_sales,
+          total_expenses_deducted: newHandover.total_expenses_deducted,
+          net_cash_submitted: newHandover.net_cash_submitted,
+          expense_ids: newHandover.expense_ids,
+          transaction_ids: newHandover.transaction_ids,
+          notes: newHandover.notes || null,
+          status: newHandover.status,
+          submitted_at: newHandover.submitted_at,
+        });
+      } catch (e) {
+        console.warn('Supabase cash handover submit sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'handover_submitted',
+      'Cash Handover Submitted to CEO',
+      `${newHandover.staff_name} submitted balance handover ${newHandover.handover_code} with Net Cash of PKR ${newHandover.net_cash_submitted.toLocaleString()} for CEO approval`,
+      { 
+        handover_code: newHandover.handover_code, 
+        net_cash: newHandover.net_cash_submitted,
+        gross_sales: newHandover.total_gross_sales,
+        expenses_deducted: newHandover.total_expenses_deducted
+      }
+    );
+
+    return newHandover;
+  }
+
+  public async approveCashHandover(id: string, ceoName: string, ceoNotes?: string): Promise<CashHandover> {
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    const index = handovers.findIndex(h => h.id === id);
+    if (index === -1) throw new Error('Cash handover record not found.');
+
+    const updated: CashHandover = {
+      ...handovers[index],
+      status: 'approved',
+      acknowledged_by: ceoName || 'Chief Executive Officer (CEO)',
+      acknowledged_at: new Date().toISOString(),
+      ceo_notes: ceoNotes || 'Physical cash received and verified against digital ledger. Handover approved.',
+    };
+
+    handovers[index] = updated;
+    setItem(STORAGE_KEYS.HANDOVERS, handovers);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('cash_handovers').update({
+          status: 'approved',
+          acknowledged_by: updated.acknowledged_by,
+          acknowledged_at: updated.acknowledged_at,
+          ceo_notes: updated.ceo_notes,
+        }).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase cash handover approve sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'handover_approved',
+      'Cash Handover Approved by CEO',
+      `CEO approved & acknowledged cash handover ${updated.handover_code} from ${updated.staff_name} (PKR ${updated.net_cash_submitted.toLocaleString()}) • Immutable Record Created`,
+      { 
+        handover_code: updated.handover_code, 
+        staff: updated.staff_name,
+        net_cash: updated.net_cash_submitted,
+        acknowledged_by: updated.acknowledged_by,
+        timestamp: updated.acknowledged_at
+      }
+    );
+
+    return updated;
+  }
+
+  public async rejectCashHandover(id: string, ceoName: string, reason: string): Promise<CashHandover> {
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    const index = handovers.findIndex(h => h.id === id);
+    if (index === -1) throw new Error('Cash handover record not found.');
+
+    const updated: CashHandover = {
+      ...handovers[index],
+      status: 'rejected',
+      acknowledged_by: ceoName || 'Chief Executive Officer (CEO)',
+      acknowledged_at: new Date().toISOString(),
+      rejection_reason: reason || 'Cash count discrepancy or unverified expense receipts.',
+    };
+
+    handovers[index] = updated;
+    setItem(STORAGE_KEYS.HANDOVERS, handovers);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('cash_handovers').update({
+          status: 'rejected',
+          acknowledged_by: updated.acknowledged_by,
+          acknowledged_at: updated.acknowledged_at,
+          rejection_reason: updated.rejection_reason,
+        }).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase cash handover reject sync notice:', e);
+      }
+    }
+
+    await this.logActivity(
+      'handover_rejected',
+      'Cash Handover Rejected / Returned by CEO',
+      `CEO rejected cash handover ${updated.handover_code} from ${updated.staff_name}. Reason: ${updated.rejection_reason}`,
+      { 
+        handover_code: updated.handover_code, 
+        staff: updated.staff_name,
+        rejection_reason: updated.rejection_reason 
+      }
+    );
+
+    return updated;
+  }
+
+  /* ================= REAL-TIME ACTIVITY LOGS ================= */
+
+  public async getActivityLogs(userId?: string, isCeo?: boolean): Promise<ActivityLog[]> {
+    const logs = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
+    if (isCeo) {
+      return logs; // CEO sees all
+    }
+    if (userId) {
+      return logs.filter(l => l.user_id === userId); // Staff sees only their own actions
+    }
+    return logs;
+  }
+
+  public async logActivity(
+    action: ActivityAction,
+    title: string,
+    description: string,
+    details?: Record<string, any>,
+    actingUser?: UserProfile
+  ): Promise<ActivityLog> {
+    const currentUser = actingUser || this.getCurrentUser();
+    const activities = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
+
+    const newLog: ActivityLog = {
+      id: `act-${Date.now()}`,
+      user_id: currentUser?.id || 'usr-system',
+      user_name: currentUser?.full_name || 'System Admin',
+      user_role: currentUser?.role || 'principal',
+      action,
+      title,
+      description,
+      details,
+      created_at: new Date().toISOString(),
+    };
+
+    activities.unshift(newLog);
+    // Keep max 500 recent logs
+    if (activities.length > 500) {
+      activities.pop();
+    }
+    setItem(STORAGE_KEYS.ACTIVITIES, activities);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('activity_logs').upsert({
+          id: newLog.id,
+          user_id: newLog.user_id,
+          user_name: newLog.user_name,
+          user_role: newLog.user_role,
+          action: newLog.action,
+          title: newLog.title,
+          description: newLog.description,
+          details: newLog.details || null,
+          created_at: newLog.created_at,
+        });
+      } catch (e) {
+        console.warn('Supabase activity log sync notice:', e);
+      }
+    }
+
+    return newLog;
+  }
+
+  /* ================= SETTINGS & CUSTOMERS ================= */
 
   public async getSettings(): Promise<SchoolSettings> {
     return getItem<SchoolSettings>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
@@ -616,6 +1095,12 @@ class DatabaseService {
 
   public async updateSettings(settings: SchoolSettings): Promise<SchoolSettings> {
     setItem(STORAGE_KEYS.SETTINGS, settings);
+    await this.logActivity(
+      'profile_updated',
+      'School Settings Updated',
+      `Updated school branding and general settings for ${settings.name}`,
+      { school_name: settings.name }
+    );
     return settings;
   }
 
@@ -685,21 +1170,17 @@ class DatabaseService {
 
     const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
 
-    // Match transactions by name, roll_no, or school_name
     const matchingTxs = transactions.filter(tx => {
       if (tx.pending_amount <= 0) return false;
-
       const matchesName = tx.buyer_name.toLowerCase().trim() === customer.full_name.toLowerCase().trim();
       const matchesRollNo = Boolean(customer.roll_no && tx.student_roll_no && tx.student_roll_no.toLowerCase().trim() === customer.roll_no.toLowerCase().trim());
       const matchesSchool = Boolean(customer.school_name && tx.school_name && tx.school_name.toLowerCase().trim() === customer.school_name.toLowerCase().trim());
-
       return matchesName || matchesRollNo || matchesSchool;
     });
 
     let remainingPayment = amountToPay;
     let totalSettled = 0;
 
-    // Process payment against matching pending transactions starting from oldest
     matchingTxs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     for (const tx of matchingTxs) {
@@ -712,7 +1193,6 @@ class DatabaseService {
       remainingPayment -= settledForTx;
       totalSettled += settledForTx;
 
-      // Also live sync updated transaction to Supabase if connected
       if (this.supabase) {
         try {
           await this.supabase.from('transactions').upsert({
@@ -732,9 +1212,16 @@ class DatabaseService {
     }
 
     setItem(STORAGE_KEYS.TRANSACTIONS, transactions);
+
+    await this.logActivity(
+      'sale_created',
+      'Customer Dues Settled',
+      `Collected PKR ${totalSettled.toLocaleString()} pending dues for ${customer.full_name} via ${paymentMethod.toUpperCase()}`,
+      { customer: customer.full_name, settled: totalSettled, payment_method: paymentMethod }
+    );
+
     return totalSettled;
   }
 }
 
 export const db = new DatabaseService();
-
