@@ -290,13 +290,13 @@ export const UserManagement: React.FC = () => {
                     </td>
 
                     <td className="p-4 text-right">
-                      {!isPrincipalUser ? (
+                      {usr.id !== currentUser?.id ? (
                         <div className="flex items-center justify-end gap-2">
                           {/* Edit Staff Account */}
                           <button
                             onClick={() => openEditModal(usr)}
                             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-                            title="Edit Staff Name, Email & Password"
+                            title="Edit User Name, Email & Password"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
@@ -309,7 +309,7 @@ export const UserManagement: React.FC = () => {
                                 ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
                                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
                             }`}
-                            title={isActive ? 'Block Staff from Login' : 'Unblock Staff'}
+                            title={isActive ? 'Block User from Login' : 'Unblock User'}
                           >
                             {isActive ? 'Block' : 'Unblock'}
                           </button>
@@ -323,17 +323,17 @@ export const UserManagement: React.FC = () => {
                             <Key className="w-4 h-4" />
                           </button>
 
-                          {/* Delete Staff Account */}
+                          {/* Delete Account */}
                           <button
                             onClick={() => setDeleteTarget(usr)}
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
-                            title="Delete Staff Account"
+                            title="Delete Account Permanently"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-slate-400 italic">CEO Master Account</span>
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold italic">Active CEO Session</span>
                       )}
                     </td>
                   </tr>

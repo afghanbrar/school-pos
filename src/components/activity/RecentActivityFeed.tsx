@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ActivityLog, ActivityAction, UserProfile, SchoolSettings } from '../../types';
 import { db } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { 
   Activity, 
   Search, 
@@ -15,7 +16,8 @@ import {
   UserPlus, 
   ShieldCheck, 
   X, 
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
 
 interface RecentActivityFeedProps {
@@ -24,6 +26,7 @@ interface RecentActivityFeedProps {
 
 export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
   const { user, isPrincipal } = useAuth();
+  const { showToast } = useToast();
 
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [staffUsers, setStaffUsers] = useState<UserProfile[]>([]);
@@ -45,6 +48,31 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
     const users = await db.getUsers();
     setActivities(logs);
     setStaffUsers(users);
+  };
+
+  const handleDeleteSingleLog = async (logId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this activity log record?')) {
+      try {
+        await db.deleteActivityLog(logId);
+        showToast('delete', 'Activity Deleted', 'Activity log removed from history.');
+        await loadActivities();
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete activity log.');
+      }
+    }
+  };
+
+  const handleClearAllLogs = async () => {
+    if (window.confirm('CAUTION: Are you sure you want to clear ALL activity logs permanently? This will delete all history.')) {
+      try {
+        await db.clearAllActivityLogs();
+        showToast('delete', 'History Cleared', 'All activity audit logs have been removed.');
+        await loadActivities();
+      } catch (err: any) {
+        alert(err.message || 'Failed to clear activity logs.');
+      }
+    }
   };
 
   const getActionIcon = (action: ActivityAction) => {
@@ -86,22 +114,18 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
   };
 
   const filteredLogs = activities.filter(log => {
-    // Access control: If staff, only see own actions
     if (!isPrincipal && log.user_id !== user?.id) {
       return false;
     }
 
-    // Filter by staff for CEO
     if (isPrincipal && selectedStaffFilter !== 'all' && log.user_id !== selectedStaffFilter) {
       return false;
     }
 
-    // Filter by action
     if (selectedActionFilter !== 'all' && log.action !== selectedActionFilter) {
       return false;
     }
 
-    // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = log.title.toLowerCase().includes(q);
@@ -129,12 +153,25 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
           </p>
         </div>
 
-        {/* Security Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs shadow-sm">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></div>
-          <span className="font-bold text-slate-700 dark:text-slate-300">
-            {isPrincipal ? 'CEO Global Audit Mode (All Staff)' : 'Private Staff Session'}
-          </span>
+        <div className="flex items-center gap-2.5">
+          {/* Clear All Logs Button for CEO */}
+          {isPrincipal && activities.length > 0 && (
+            <button
+              onClick={handleClearAllLogs}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+              title="Clear all activity logs"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear All Logs
+            </button>
+          )}
+
+          {/* Security Indicator */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs shadow-sm">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></div>
+            <span className="font-bold text-slate-700 dark:text-slate-300">
+              {isPrincipal ? 'CEO Global Audit' : 'Staff Session'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -238,10 +275,23 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
                   </div>
                 </div>
 
-                {/* Click into details hint */}
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 font-bold shrink-0 transition-colors">
-                  <span className="hidden sm:inline text-[11px]">View Full Details</span>
-                  <Eye className="w-4 h-4" />
+                {/* Right Action Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 text-xs text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 font-bold transition-colors">
+                    <span className="hidden sm:inline text-[11px]">View Details</span>
+                    <Eye className="w-4 h-4" />
+                  </div>
+
+                  {/* Single Log Delete Button for CEO */}
+                  {isPrincipal && (
+                    <button
+                      onClick={(e) => handleDeleteSingleLog(log.id, e)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
+                      title="Delete activity log"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -249,7 +299,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
         )}
       </div>
 
-      {/* ACTIVITY FULL DETAILS MODAL (CLICK-INTO FOR CEO & STAFF) */}
+      {/* ACTIVITY FULL DETAILS MODAL */}
       {selectedActivity && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">

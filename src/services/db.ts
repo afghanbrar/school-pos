@@ -29,16 +29,17 @@ const DEFAULT_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ektqw
 const DEFAULT_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrdHF3cG5zcXFucnVrdWJubWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NDUzNDMsImV4cCI6MjEwMTMyMTM0M30.WQTHB6qyn4Aah9zZlSfllqZCL5RHVzN1ZdCYFw0oMbA';
 
 const STORAGE_KEYS = {
-  USERS: 'school_pos_users_v2',
-  CATEGORIES: 'school_pos_categories_v2',
-  PRODUCTS: 'school_pos_products_v2',
-  TRANSACTIONS: 'school_pos_transactions_v2',
-  SETTINGS: 'school_pos_settings_v2',
-  CUSTOMERS: 'school_pos_customers_v2',
-  CURRENT_USER: 'school_pos_current_user_v2',
-  EXPENSES: 'school_pos_expenses_v2',
-  HANDOVERS: 'school_pos_handovers_v2',
-  ACTIVITIES: 'school_pos_activities_v2',
+  USERS: 'school_pos_users_v3',
+  CATEGORIES: 'school_pos_categories_v3',
+  PRODUCTS: 'school_pos_products_v3',
+  TRANSACTIONS: 'school_pos_transactions_v3',
+  SETTINGS: 'school_pos_settings_v3',
+  CUSTOMERS: 'school_pos_customers_v3',
+  CURRENT_USER: 'school_pos_current_user_v3',
+  EXPENSES: 'school_pos_expenses_v3',
+  HANDOVERS: 'school_pos_handovers_v3',
+  ACTIVITIES: 'school_pos_activities_v3',
+  INITIALIZED: 'school_pos_initialized_flag_v3',
   SUPABASE_URL: 'school_pos_supabase_url',
   SUPABASE_KEY: 'school_pos_supabase_key',
 };
@@ -70,42 +71,29 @@ class DatabaseService {
   }
 
   private initLocalDefaults() {
-    let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
-    if (!users || users.length === 0) {
-      users = INITIAL_USERS;
-      setItem(STORAGE_KEYS.USERS, users);
+    const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
+
+    if (!isInitialized) {
+      // First time initialization: populate mock defaults
+      setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
+      setItem(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+      setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+      setItem(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
+      setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
+      setItem(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+      setItem(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+      setItem(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+      setItem(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
+      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     } else {
-      // Ensure CEO account is present in existing storage
+      // Subsequent loads: respect user deletions! Never re-inject deleted products/transactions/expenses.
+      // Only safeguard: ensure at least one active CEO account exists so nobody is locked out.
+      let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
       const hasCeo = users.some(u => u.role === 'principal');
       if (!hasCeo) {
         users.unshift(INITIAL_USERS[0]);
         setItem(STORAGE_KEYS.USERS, users);
       }
-    }
-
-    if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
-      setItem(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
-      setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.TRANSACTIONS)) {
-      setItem(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
-      setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
-      setItem(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.EXPENSES)) {
-      setItem(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.HANDOVERS)) {
-      setItem(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.ACTIVITIES)) {
-      setItem(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
     }
   }
 
@@ -154,7 +142,7 @@ class DatabaseService {
 
     try {
       // 1. Sync Categories
-      const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+      const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
       if (categories.length > 0) {
         const { error: catErr } = await this.supabase.from('categories').upsert(
           categories.map(c => ({
@@ -168,8 +156,8 @@ class DatabaseService {
         if (catErr) console.warn('Categories Table sync:', catErr.message);
       }
 
-      // 2. Sync Products (with wholesaler fields)
-      const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+      // 2. Sync Products
+      const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
       if (products.length > 0) {
         const { error: prodErr } = await this.supabase.from('products').upsert(
           products.map(p => ({
@@ -195,7 +183,7 @@ class DatabaseService {
       }
 
       // 3. Sync User Profiles
-      const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+      const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
       if (users.length > 0) {
         const { error: userErr } = await this.supabase.from('profiles').upsert(
           users.map(u => ({
@@ -211,7 +199,7 @@ class DatabaseService {
       }
 
       // 4. Sync Transactions
-      const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
+      const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
       if (transactions.length > 0) {
         const { error: txErr } = await this.supabase.from('transactions').upsert(
           transactions.map(tx => ({
@@ -236,7 +224,7 @@ class DatabaseService {
       }
 
       // 5. Sync Expenses
-      const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+      const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, []);
       if (expenses.length > 0) {
         const { error: expErr } = await this.supabase.from('expenses').upsert(
           expenses.map(e => ({
@@ -256,7 +244,7 @@ class DatabaseService {
       }
 
       // 6. Sync Cash Handovers
-      const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+      const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, []);
       if (handovers.length > 0) {
         const { error: hndErr } = await this.supabase.from('cash_handovers').upsert(
           handovers.map(h => ({
@@ -494,43 +482,6 @@ class DatabaseService {
     return newUser;
   }
 
-  public async updateUserStatus(userId: string, status: UserStatus): Promise<UserProfile> {
-    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-    const index = users.findIndex(u => u.id === userId);
-    if (index === -1) throw new Error('User not found.');
-
-    if (users[index].role === 'principal') {
-      throw new Error('CEO Super Admin status cannot be set to inactive.');
-    }
-
-    users[index].status = status;
-    setItem(STORAGE_KEYS.USERS, users);
-
-    await this.logActivity(
-      'user_status_changed',
-      'Staff Status Changed',
-      `Changed status of ${users[index].full_name} to ${status.toUpperCase()}`,
-      { staff_id: userId, status }
-    );
-
-    return users[index];
-  }
-
-  public async resetUserPassword(userId: string, newPassword?: string): Promise<void> {
-    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-    const user = users.find(u => u.id === userId);
-    if (!user) throw new Error('User not found.');
-    user.password = newPassword || 'password123';
-    setItem(STORAGE_KEYS.USERS, users);
-
-    await this.logActivity(
-      'profile_updated',
-      'Staff Password Reset',
-      `Reset password for staff member ${user.full_name} (${user.email})`,
-      { staff_id: userId }
-    );
-  }
-
   public async updateStaffUser(
     userId: string,
     updates: { full_name?: string; email?: string; password?: string; status?: UserStatus }
@@ -586,13 +537,51 @@ class DatabaseService {
     return users[index];
   }
 
+  public async updateUserStatus(userId: string, status: UserStatus): Promise<UserProfile> {
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const index = users.findIndex(u => u.id === userId);
+    if (index === -1) throw new Error('User not found.');
+
+    if (users[index].role === 'principal') {
+      throw new Error('CEO Super Admin status cannot be set to inactive.');
+    }
+
+    users[index].status = status;
+    setItem(STORAGE_KEYS.USERS, users);
+
+    await this.logActivity(
+      'user_status_changed',
+      'Staff Status Changed',
+      `Changed status of ${users[index].full_name} to ${status.toUpperCase()}`,
+      { staff_id: userId, status }
+    );
+
+    return users[index];
+  }
+
+  public async resetUserPassword(userId: string, newPassword?: string): Promise<void> {
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const user = users.find(u => u.id === userId);
+    if (!user) throw new Error('User not found.');
+    user.password = newPassword || 'password123';
+    setItem(STORAGE_KEYS.USERS, users);
+
+    await this.logActivity(
+      'profile_updated',
+      'Staff Password Reset',
+      `Reset password for staff member ${user.full_name} (${user.email})`,
+      { staff_id: userId }
+    );
+  }
+
   public async deleteStaffUser(userId: string): Promise<void> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const userToDelete = users.find(u => u.id === userId);
-    if (!userToDelete) throw new Error('Staff user not found.');
+    if (!userToDelete) throw new Error('User account not found.');
 
-    if (userToDelete.role === 'principal') {
-      throw new Error('CEO Super Admin account cannot be deleted.');
+    const currentUser = this.getCurrentUser();
+    if (currentUser && currentUser.id === userId) {
+      throw new Error('You cannot delete your own active logged-in CEO account.');
     }
 
     const filtered = users.filter(u => u.id !== userId);
@@ -602,14 +591,14 @@ class DatabaseService {
       try {
         await this.supabase.from('profiles').delete().eq('id', userId);
       } catch (e) {
-        console.warn('Supabase staff delete sync notice:', e);
+        console.warn('Supabase user delete sync notice:', e);
       }
     }
 
     await this.logActivity(
       'user_status_changed',
-      'Staff Account Deleted',
-      `Deleted staff account ${userToDelete.full_name} (${userToDelete.email}) from the system`,
+      'User Account Deleted',
+      `Deleted account ${userToDelete.full_name} (${userToDelete.email}) from the system`,
       { staff_id: userId, email: userToDelete.email }
     );
   }
@@ -664,11 +653,11 @@ class DatabaseService {
   }
 
   public async deleteCategory(id: string): Promise<void> {
-    const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
     const filtered = categories.filter(c => c.id !== id);
     setItem(STORAGE_KEYS.CATEGORIES, filtered);
 
-    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const defaultCat = filtered[0]?.id || '';
     const updatedProducts = products.map(p => p.category_id === id ? { ...p, category_id: defaultCat } : p);
     setItem(STORAGE_KEYS.PRODUCTS, updatedProducts);
@@ -784,7 +773,7 @@ class DatabaseService {
   }
 
   public async deleteProduct(id: string): Promise<void> {
-    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const prod = products.find(p => p.id === id);
     const filtered = products.filter(p => p.id !== id);
     setItem(STORAGE_KEYS.PRODUCTS, filtered);
@@ -810,11 +799,11 @@ class DatabaseService {
   /* ================= TRANSACTIONS (POS SALES) ================= */
 
   public async getTransactions(): Promise<Transaction[]> {
-    return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
+    return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, INITIAL_PRODUCTS.length ? generateSampleTransactions() : []);
   }
 
   public async createTransaction(txData: Omit<Transaction, 'id' | 'invoice_number' | 'created_at'>): Promise<Transaction> {
-    const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
+    const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 
     txData.items.forEach(item => {
@@ -878,6 +867,30 @@ class DatabaseService {
     return newTx;
   }
 
+  public async deleteTransaction(id: string): Promise<void> {
+    const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    const tx = transactions.find(t => t.id === id);
+    const filtered = transactions.filter(t => t.id !== id);
+    setItem(STORAGE_KEYS.TRANSACTIONS, filtered);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('transactions').delete().eq('id', id);
+      } catch (e) {
+        console.warn('Supabase transaction delete sync notice:', e);
+      }
+    }
+
+    if (tx) {
+      await this.logActivity(
+        'sale_created',
+        'Transaction Record Deleted',
+        `Deleted sales invoice #${tx.invoice_number} for ${tx.buyer_name} (Amount: PKR ${tx.total_amount.toLocaleString()})`,
+        { transaction_id: id, invoice_number: tx.invoice_number }
+      );
+    }
+  }
+
   /* ================= SCHOOL EXPENSES (DEDUCTED FROM REVENUE) ================= */
 
   public async getExpenses(): Promise<SchoolExpense[]> {
@@ -931,7 +944,7 @@ class DatabaseService {
   }
 
   public async deleteExpense(id: string): Promise<void> {
-    const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, []);
     const exp = expenses.find(e => e.id === id);
     const filtered = expenses.filter(e => e.id !== id);
     setItem(STORAGE_KEYS.EXPENSES, filtered);
@@ -963,7 +976,7 @@ class DatabaseService {
   public async submitCashHandover(
     data: Omit<CashHandover, 'id' | 'handover_code' | 'status' | 'submitted_at'>
   ): Promise<CashHandover> {
-    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, []);
     const codeSeq = (handovers.length + 1).toString().padStart(3, '0');
     const now = new Date();
     const yearMonth = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -1020,7 +1033,7 @@ class DatabaseService {
   }
 
   public async approveCashHandover(id: string, ceoName: string, ceoNotes?: string): Promise<CashHandover> {
-    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, []);
     const index = handovers.findIndex(h => h.id === id);
     if (index === -1) throw new Error('Cash handover record not found.');
 
@@ -1065,7 +1078,7 @@ class DatabaseService {
   }
 
   public async rejectCashHandover(id: string, ceoName: string, reason: string): Promise<CashHandover> {
-    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, []);
     const index = handovers.findIndex(h => h.id === id);
     if (index === -1) throw new Error('Cash handover record not found.');
 
@@ -1107,15 +1120,39 @@ class DatabaseService {
     return updated;
   }
 
+  public async deleteCashHandover(id: string): Promise<void> {
+    const handovers = getItem<CashHandover[]>(STORAGE_KEYS.HANDOVERS, []);
+    const hnd = handovers.find(h => h.id === id);
+    const filtered = handovers.filter(h => h.id !== id);
+    setItem(STORAGE_KEYS.HANDOVERS, filtered);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('cash_handovers').delete().eq('id', id);
+      } catch (e) {
+        console.warn('Supabase cash handover delete sync notice:', e);
+      }
+    }
+
+    if (hnd) {
+      await this.logActivity(
+        'handover_rejected',
+        'Handover Record Deleted',
+        `Deleted cash handover record ${hnd.handover_code} from ${hnd.staff_name}`,
+        { handover_id: id, handover_code: hnd.handover_code }
+      );
+    }
+  }
+
   /* ================= REAL-TIME ACTIVITY LOGS ================= */
 
   public async getActivityLogs(userId?: string, isCeo?: boolean): Promise<ActivityLog[]> {
     const logs = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
     if (isCeo) {
-      return logs; // CEO sees all
+      return logs;
     }
     if (userId) {
-      return logs.filter(l => l.user_id === userId); // Staff sees only their own actions
+      return logs.filter(l => l.user_id === userId);
     }
     return logs;
   }
@@ -1143,7 +1180,6 @@ class DatabaseService {
     };
 
     activities.unshift(newLog);
-    // Keep max 500 recent logs
     if (activities.length > 500) {
       activities.pop();
     }
@@ -1170,6 +1206,32 @@ class DatabaseService {
     return newLog;
   }
 
+  public async deleteActivityLog(id: string): Promise<void> {
+    const activities = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, []);
+    const filtered = activities.filter(a => a.id !== id);
+    setItem(STORAGE_KEYS.ACTIVITIES, filtered);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('activity_logs').delete().eq('id', id);
+      } catch (e) {
+        console.warn('Supabase activity log delete sync notice:', e);
+      }
+    }
+  }
+
+  public async clearAllActivityLogs(): Promise<void> {
+    setItem(STORAGE_KEYS.ACTIVITIES, []);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('activity_logs').delete().neq('id', '0');
+      } catch (e) {
+        console.warn('Supabase activity logs clear sync notice:', e);
+      }
+    }
+  }
+
   /* ================= SETTINGS & CUSTOMERS ================= */
 
   public async getSettings(): Promise<SchoolSettings> {
@@ -1192,7 +1254,7 @@ class DatabaseService {
   }
 
   public async createCustomer(customerData: Omit<CustomerProfile, 'id' | 'created_at'>): Promise<CustomerProfile> {
-    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
     const prefix = customerData.type === 'student' ? 'stud' : 'cust';
     const newCustomer: CustomerProfile = {
       ...customerData,
@@ -1222,7 +1284,7 @@ class DatabaseService {
   }
 
   public async updateCustomer(id: string, customerData: Partial<CustomerProfile>): Promise<CustomerProfile> {
-    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
     const index = customers.findIndex(c => c.id === id);
     if (index === -1) throw new Error('Customer profile not found.');
 
@@ -1237,9 +1299,17 @@ class DatabaseService {
   }
 
   public async deleteCustomer(id: string): Promise<void> {
-    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
     const filtered = customers.filter(c => c.id !== id);
     setItem(STORAGE_KEYS.CUSTOMERS, filtered);
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('profiles').delete().eq('id', id);
+      } catch (e) {
+        console.warn('Supabase customer delete sync notice:', e);
+      }
+    }
   }
 
   public async payCustomerDues(
@@ -1247,11 +1317,11 @@ class DatabaseService {
     amountToPay: number,
     paymentMethod: PaymentMethod
   ): Promise<number> {
-    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
     const customer = customers.find(c => c.id === customerId);
     if (!customer) throw new Error('Customer profile not found.');
 
-    const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
+    const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
 
     const matchingTxs = transactions.filter(tx => {
       if (tx.pending_amount <= 0) return false;

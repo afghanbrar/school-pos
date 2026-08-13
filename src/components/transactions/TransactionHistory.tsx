@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import type { Transaction, SchoolSettings } from '../../types';
 import { db } from '../../services/db';
 import { InvoiceModal } from '../pos/InvoiceModal';
+import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
 import { 
   Receipt, 
   Search, 
   Download, 
   Eye,
-  Printer
+  Printer,
+  Trash2
 } from 'lucide-react';
 import { generateInvoicePDF } from '../../utils/pdfGenerator';
 import { printPosInvoiceReceipt } from '../../utils/print';
@@ -17,10 +21,14 @@ interface TransactionHistoryProps {
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings }) => {
+  const { showToast } = useToast();
+  const { isPrincipal } = useAuth();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
 
   const currency = settings.currency_symbol || 'PKR';
 
@@ -31,6 +39,18 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
   const loadTxHistory = async () => {
     const list = await db.getTransactions();
     setTransactions(list);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await db.deleteTransaction(deleteTarget.id);
+      showToast('delete', 'Transaction Deleted', `Invoice #${deleteTarget.invoice_number} deleted from system & database.`);
+      setDeleteTarget(null);
+      await loadTxHistory();
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete transaction.');
+    }
   };
 
   const filteredTxs = transactions.filter(tx => {
@@ -48,7 +68,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
   });
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-fadeIn">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -75,7 +95,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
         <div className="flex items-center gap-2">
           <button
             onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               statusFilter === 'all'
                 ? 'bg-slate-900 text-white dark:bg-emerald-600 shadow-sm'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -85,7 +105,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
           </button>
           <button
             onClick={() => setStatusFilter('paid')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               statusFilter === 'paid'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -95,7 +115,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
           </button>
           <button
             onClick={() => setStatusFilter('pending')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               statusFilter === 'pending'
                 ? 'bg-rose-600 text-white shadow-sm'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -197,6 +217,17 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
                           >
                             <Download className="w-4 h-4" />
                           </button>
+
+                          {/* Delete Transaction Option for CEO */}
+                          {isPrincipal && (
+                            <button
+                              onClick={() => setDeleteTarget(tx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
+                              title="Delete Transaction Record"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -213,6 +244,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
           transaction={selectedTx}
           settings={settings}
           onClose={() => setSelectedTx(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          title="Delete Sales Transaction"
+          itemName={`Invoice #${deleteTarget.invoice_number} (${deleteTarget.buyer_name} - ${currency} ${deleteTarget.total_amount.toLocaleString()})`}
+          itemType="Sales Transaction"
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>
