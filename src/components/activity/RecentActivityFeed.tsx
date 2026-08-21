@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import type { ActivityLog, ActivityAction, UserProfile, SchoolSettings } from '../../types';
 import { db } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../context/ToastContext';
 import { 
   Activity, 
   Search, 
@@ -16,9 +15,9 @@ import {
   UserPlus, 
   ShieldCheck, 
   X, 
-  Eye,
-  Trash2
+  Eye
 } from 'lucide-react';
+import { formatRoleLabel } from '../../utils/roleUtils';
 
 interface RecentActivityFeedProps {
   settings?: SchoolSettings;
@@ -26,7 +25,6 @@ interface RecentActivityFeedProps {
 
 export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
   const { user, isPrincipal } = useAuth();
-  const { showToast } = useToast();
 
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [staffUsers, setStaffUsers] = useState<UserProfile[]>([]);
@@ -36,7 +34,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
   const [selectedStaffFilter, setSelectedStaffFilter] = useState('all');
   const [selectedActionFilter, setSelectedActionFilter] = useState('all');
 
-  // Activity Detail Modal
+  // Detail Modal
   const [selectedActivity, setSelectedActivity] = useState<ActivityLog | null>(null);
 
   useEffect(() => {
@@ -48,31 +46,6 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
     const users = await db.getUsers();
     setActivities(logs);
     setStaffUsers(users);
-  };
-
-  const handleDeleteSingleLog = async (logId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this activity log record?')) {
-      try {
-        await db.deleteActivityLog(logId);
-        showToast('delete', 'Activity Deleted', 'Activity log removed from history.');
-        await loadActivities();
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete activity log.');
-      }
-    }
-  };
-
-  const handleClearAllLogs = async () => {
-    if (window.confirm('CAUTION: Are you sure you want to clear ALL activity logs permanently? This will delete all history.')) {
-      try {
-        await db.clearAllActivityLogs();
-        showToast('delete', 'History Cleared', 'All activity audit logs have been removed.');
-        await loadActivities();
-      } catch (err: any) {
-        alert(err.message || 'Failed to clear activity logs.');
-      }
-    }
   };
 
   const getActionIcon = (action: ActivityAction) => {
@@ -148,23 +121,12 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {isPrincipal 
-              ? 'Real-time global monitoring of all live cashier actions, sales, expenses, inventory & approvals across the campus.'
+              ? 'Real-time global audit stream of all live cashier transactions, expenses, inventory & approvals across the campus. Immutable record history.'
               : 'Audit history of your POS billing transactions, expense deductions, and handover submissions.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* Clear All Logs Button for CEO */}
-          {isPrincipal && activities.length > 0 && (
-            <button
-              onClick={handleClearAllLogs}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs font-bold transition-all cursor-pointer"
-              title="Clear all activity logs"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Clear All Logs
-            </button>
-          )}
-
           {/* Security Indicator */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs shadow-sm">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></div>
@@ -281,17 +243,6 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
                     <span className="hidden sm:inline text-[11px]">View Details</span>
                     <Eye className="w-4 h-4" />
                   </div>
-
-                  {/* Single Log Delete Button for CEO */}
-                  {isPrincipal && (
-                    <button
-                      onClick={(e) => handleDeleteSingleLog(log.id, e)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
-                      title="Delete activity log"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
                 </div>
               </div>
             );
@@ -329,7 +280,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
             <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs space-y-2">
               <div className="flex justify-between">
                 <span className="text-slate-500">Executing User:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedActivity.user_name} ({selectedActivity.user_role.toUpperCase()})</span>
+                <span className="font-bold text-slate-900 dark:text-white">{selectedActivity.user_name} ({formatRoleLabel(selectedActivity.user_role)})</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Action Type:</span>

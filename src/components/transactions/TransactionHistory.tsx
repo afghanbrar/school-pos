@@ -2,16 +2,12 @@ import React, { useState, useEffect } from 'react';
 import type { Transaction, SchoolSettings } from '../../types';
 import { db } from '../../services/db';
 import { InvoiceModal } from '../pos/InvoiceModal';
-import { useToast } from '../../context/ToastContext';
-import { useAuth } from '../../context/AuthContext';
-import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
 import { 
   Receipt, 
   Search, 
   Download, 
-  Eye,
-  Printer,
-  Trash2
+  Eye, 
+  Printer 
 } from 'lucide-react';
 import { generateInvoicePDF } from '../../utils/pdfGenerator';
 import { printPosInvoiceReceipt } from '../../utils/print';
@@ -21,14 +17,10 @@ interface TransactionHistoryProps {
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings }) => {
-  const { showToast } = useToast();
-  const { isPrincipal } = useAuth();
-
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
 
   const currency = settings.currency_symbol || 'PKR';
 
@@ -39,18 +31,6 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
   const loadTxHistory = async () => {
     const list = await db.getTransactions();
     setTransactions(list);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    try {
-      await db.deleteTransaction(deleteTarget.id);
-      showToast('delete', 'Transaction Deleted', `Invoice #${deleteTarget.invoice_number} deleted from system & database.`);
-      setDeleteTarget(null);
-      await loadTxHistory();
-    } catch (e: any) {
-      alert(e.message || 'Failed to delete transaction.');
-    }
   };
 
   const filteredTxs = transactions.filter(tx => {
@@ -75,7 +55,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
             <Receipt className="w-6 h-6 text-emerald-600" /> Sales Receipts & Payment Audit Log
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Search past receipts, review item breakdown, re-print or export official PDF invoices.
+            Search past receipts, review item breakdown, re-print or export official PDF invoices. Immutable sales history.
           </p>
         </div>
       </div>
@@ -217,17 +197,6 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
                           >
                             <Download className="w-4 h-4" />
                           </button>
-
-                          {/* Delete Transaction Option for CEO */}
-                          {isPrincipal && (
-                            <button
-                              onClick={() => setDeleteTarget(tx)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
-                              title="Delete Transaction Record"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -246,16 +215,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
           onClose={() => setSelectedTx(null)}
         />
       )}
-
-      {deleteTarget && (
-        <DeleteConfirmModal
-          title="Delete Sales Transaction"
-          itemName={`Invoice #${deleteTarget.invoice_number} (${deleteTarget.buyer_name} - ${currency} ${deleteTarget.total_amount.toLocaleString()})`}
-          itemType="Sales Transaction"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
     </div>
   );
 };
+

@@ -16,6 +16,7 @@ import { TransactionHistory } from './components/transactions/TransactionHistory
 import { RecentActivityFeed } from './components/activity/RecentActivityFeed';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ProfileModal } from './components/profile/ProfileModal';
+import { OfflineModal } from './components/common/OfflineModal';
 import type { SchoolSettings } from './types';
 import { db } from './services/db';
 import { Loader2 } from 'lucide-react';
@@ -41,12 +42,18 @@ const MainAppContent: React.FC = () => {
       <div className="h-screen w-screen bg-slate-900 flex flex-col items-center justify-center text-white">
         <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
         <p className="text-xs font-semibold text-slate-300">Loading School POS & Security Container...</p>
+        <OfflineModal />
       </div>
     );
   }
 
   if (!user) {
-    return <LoginModal />;
+    return (
+      <>
+        <LoginModal />
+        <OfflineModal />
+      </>
+    );
   }
 
   return (
@@ -88,6 +95,7 @@ const MainAppContent: React.FC = () => {
       )}
 
       <ToastContainer />
+      <OfflineModal />
     </div>
   );
 };

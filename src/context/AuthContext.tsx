@@ -1,15 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { UserProfile } from '../types';
+import type { UserProfile, UserRole } from '../types';
 import { db } from '../services/db';
 
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
-  isPrincipal: boolean;
+  isCeo: boolean;
+  isPrincipal: boolean; // Alias for CEO super admin authority across existing code
   isStaff: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  registerUser: (fullName: string, email: string, role: 'principal' | 'staff', password?: string) => Promise<void>;
+  registerUser: (fullName: string, email: string, role?: UserRole, password?: string) => Promise<void>;
   updateProfile: (updates: { full_name?: string; email?: string; password?: string }) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -71,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const registerUser = async (fullName: string, email: string, role: 'principal' | 'staff', password?: string) => {
+  const registerUser = async (fullName: string, email: string, role: UserRole = 'staff', password?: string) => {
     setLoading(true);
     try {
       const loggedUser = await db.registerUser(fullName, email, role, password);
@@ -97,14 +98,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const isPrincipal = user?.role === 'principal';
-  const isStaff = user?.role === 'staff';
+  // Full system authority is strictly for the CEO; other users have standard staff restrictions.
+  const isCeo = user?.role === 'ceo' || user?.email === 'ceo@haidermemorial.edu.pk';
+  const isPrincipal = isCeo; // Maps to Super Admin full authority
+  const isStaff = !isCeo;
 
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
+        isCeo,
         isPrincipal,
         isStaff,
         loginWithGoogle,
@@ -127,3 +131,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/db';
+import { formatRoleLabel } from '../../utils/roleUtils';
 import { 
   ShoppingCart, 
   Package, 
@@ -20,7 +21,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const { isPrincipal } = useAuth();
+  const { isPrincipal, user } = useAuth();
   const [pendingHandoverCount, setPendingHandoverCount] = useState(0);
 
   useEffect(() => {
@@ -140,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         {!isPrincipal ? (
           <div className="p-3.5 bg-slate-800/50 rounded-2xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
             <div className="flex items-center gap-1.5 text-amber-400 font-medium">
-              <Lock className="w-3.5 h-3.5" /> Staff Cashier Mode
+              <Lock className="w-3.5 h-3.5" /> {user ? `${formatRoleLabel(user.role)} Mode` : 'Staff Mode'}
             </div>
             <p className="text-[10px] leading-relaxed">
               Sales, expense deductions & cash handovers are monitored live by the CEO administration.

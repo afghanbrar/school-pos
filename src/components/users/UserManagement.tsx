@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { UserProfile, UserStatus } from '../../types';
+import type { UserProfile, UserStatus, UserRole } from '../../types';
 import { db } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -16,9 +16,12 @@ import {
   X,
   Edit3,
   Trash2,
-  Save
+  Save,
+  Briefcase
 } from 'lucide-react';
 import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
+import { UserStatusConfirmModal } from './UserStatusConfirmModal';
+import { formatRoleLabel, getRoleBadgeStyle, AVAILABLE_ROLES } from '../../utils/roleUtils';
 
 export const UserManagement: React.FC = () => {
   const { isPrincipal, user: currentUser } = useAuth();
@@ -32,6 +35,7 @@ export const UserManagement: React.FC = () => {
   const [createFullName, setCreateFullName] = useState('');
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
+  const [createRole, setCreateRole] = useState<UserRole>('cashier');
   const [createError, setCreateError] = useState<string | null>(null);
 
   // Edit Staff Modal State
@@ -39,9 +43,14 @@ export const UserManagement: React.FC = () => {
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState<UserRole>('staff');
   const [editStatus, setEditStatus] = useState<UserStatus>('active');
   const [editError, setEditError] = useState<string | null>(null);
   const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  // Block / Unblock Modal State
+  const [statusChangeTarget, setStatusChangeTarget] = useState<{ user: UserProfile; targetStatus: UserStatus } | null>(null);
+  const [statusChangeLoading, setStatusChangeLoading] = useState(false);
 
   // Delete Staff Modal State
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
@@ -70,15 +79,16 @@ export const UserManagement: React.FC = () => {
     }
 
     try {
-      const newStaff = await db.createStaffUser(createFullName, createEmail, createPassword || 'password123');
-      showToast('success', 'Staff Account Created', `Created account for ${newStaff.full_name} (${newStaff.email}).`);
+      const newStaff = await db.createStaffUser(createFullName, createEmail, createPassword || 'password123', createRole);
+      showToast('success', 'Account Created', `Created ${formatRoleLabel(newStaff.role)} account for ${newStaff.full_name} (${newStaff.email}).`);
       setCreateFullName('');
       setCreateEmail('');
       setCreatePassword('');
+      setCreateRole('cashier');
       setIsCreateModalOpen(false);
       await loadUsers();
     } catch (err: any) {
-      setCreateError(err.message || 'Failed to create staff account.');
+      setCreateError(err.message || 'Failed to create account.');
     }
   };
 
@@ -87,6 +97,7 @@ export const UserManagement: React.FC = () => {
     setEditFullName(staff.full_name);
     setEditEmail(staff.email);
     setEditPassword(staff.password || '');
+    setEditRole(staff.role || 'staff');
     setEditStatus(staff.status);
     setEditError(null);
   };
@@ -107,14 +118,15 @@ export const UserManagement: React.FC = () => {
         full_name: editFullName.trim(),
         email: editEmail.trim(),
         password: editPassword.trim() || undefined,
+        role: editRole,
         status: editStatus,
       });
 
-      showToast('success', 'Staff Updated', `Updated profile and credentials for ${editFullName.trim()}.`);
+      showToast('success', 'User Updated', `Updated profile and credentials for ${editFullName.trim()}.`);
       setEditingStaff(null);
       await loadUsers();
     } catch (err: any) {
-      setEditError(err.message || 'Failed to update staff account.');
+      setEditError(err.message || 'Failed to update account.');
     } finally {
       setSubmittingEdit(false);
     }
@@ -124,31 +136,40 @@ export const UserManagement: React.FC = () => {
     if (!deleteTarget) return;
     try {
       await db.deleteStaffUser(deleteTarget.id);
-      showToast('delete', 'Staff Deleted', `Staff account ${deleteTarget.full_name} has been removed.`);
+      showToast('delete', 'User Deleted', `Account ${deleteTarget.full_name} has been removed.`);
       setDeleteTarget(null);
       await loadUsers();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete staff account.');
+      alert(err.message || 'Failed to delete account.');
     }
   };
 
-  const handleToggleStatus = async (userToToggle: UserProfile) => {
-    if (userToToggle.role === 'principal') {
+  const handleToggleStatusClick = (userToToggle: UserProfile) => {
+    if (userToToggle.role === 'ceo' || (userToToggle.role === 'principal' && userToToggle.email === 'ceo@haidermemorial.edu.pk')) {
       alert('CEO Super Admin account status cannot be set to inactive.');
       return;
     }
 
     const nextStatus: UserStatus = userToToggle.status === 'active' ? 'inactive' : 'active';
-    const actionText = nextStatus === 'inactive' ? 'deactivate and block' : 'activate';
+    setStatusChangeTarget({ user: userToToggle, targetStatus: nextStatus });
+  };
 
-    if (window.confirm(`Are you sure you want to ${actionText} ${userToToggle.full_name}?`)) {
-      try {
-        await db.updateUserStatus(userToToggle.id, nextStatus);
-        showToast('warning', 'Status Changed', `${userToToggle.full_name} is now ${nextStatus.toUpperCase()}.`);
-        await loadUsers();
-      } catch (err: any) {
-        alert(err.message || 'Failed to update user status.');
-      }
+  const handleConfirmStatusChange = async () => {
+    if (!statusChangeTarget) return;
+    setStatusChangeLoading(true);
+    try {
+      await db.updateUserStatus(statusChangeTarget.user.id, statusChangeTarget.targetStatus);
+      showToast(
+        statusChangeTarget.targetStatus === 'inactive' ? 'warning' : 'success',
+        'Account Status Updated',
+        `${statusChangeTarget.user.full_name} is now ${statusChangeTarget.targetStatus.toUpperCase()}.`
+      );
+      setStatusChangeTarget(null);
+      await loadUsers();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update status.');
+    } finally {
+      setStatusChangeLoading(false);
     }
   };
 
@@ -172,7 +193,8 @@ export const UserManagement: React.FC = () => {
 
   const filteredUsers = users.filter(u => 
     u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.role && u.role.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   if (!isPrincipal) {
@@ -181,7 +203,7 @@ export const UserManagement: React.FC = () => {
         <Lock className="w-12 h-12 text-rose-500 mx-auto mb-3" />
         <h3 className="text-lg font-bold text-slate-800 dark:text-white">Restricted CEO Admin Access</h3>
         <p className="text-xs text-slate-500 mt-2">
-          Only the CEO (Super Admin) has authority to manage staff accounts, edit user emails, passwords and security permissions.
+          Only the CEO (Super Admin) has authority to manage accounts, assign roles, edit emails, passwords and security permissions.
         </p>
       </div>
     );
@@ -193,21 +215,21 @@ export const UserManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Staff Management & Account Control</h2>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Staff Management & Role Control</h2>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300">
               <ShieldCheck className="w-3 h-3 inline mr-1" /> CEO Exclusive
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Create new staff cashiers, edit staff emails & passwords, toggle active/blocked status, or remove accounts.
+            Create user accounts with assigned roles (CEO, Cashier, Principal, Staff, Accountant, Manager), manage permissions and block/unblock status.
           </p>
         </div>
 
         <button
-          onClick={() => { setCreateError(null); setIsCreateModalOpen(true); }}
+          onClick={() => { setCreateError(null); setCreateRole('cashier'); setIsCreateModalOpen(true); }}
           className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
         >
-          <UserPlus className="w-4 h-4" /> Create New Staff Account
+          <UserPlus className="w-4 h-4" /> Create New Account
         </button>
       </div>
 
@@ -218,7 +240,7 @@ export const UserManagement: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search staff by name or email..."
+              placeholder="Search by name, email, or role..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500 dark:text-white"
@@ -233,8 +255,8 @@ export const UserManagement: React.FC = () => {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="p-4">Staff User Details</th>
-                <th className="p-4">System Role</th>
+                <th className="p-4">User Details</th>
+                <th className="p-4">Assigned Role</th>
                 <th className="p-4 text-center">Status</th>
                 <th className="p-4">Created Date</th>
                 <th className="p-4 text-right">Management Actions</th>
@@ -242,8 +264,9 @@ export const UserManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
               {filteredUsers.map(usr => {
-                const isPrincipalUser = usr.role === 'principal';
+                const isCeoUser = usr.role === 'ceo' || usr.email === 'ceo@haidermemorial.edu.pk';
                 const isActive = usr.status === 'active';
+                const badgeStyle = getRoleBadgeStyle(usr.role);
 
                 return (
                   <tr key={usr.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
@@ -262,15 +285,10 @@ export const UserManagement: React.FC = () => {
                     </td>
 
                     <td className="p-4">
-                      {isPrincipalUser ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-200">
-                          <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" /> CEO Super Admin
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                          Staff Cashier
-                        </span>
-                      )}
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
+                        {isCeoUser && <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" />}
+                        {formatRoleLabel(usr.role)}
+                      </span>
                     </td>
 
                     <td className="p-4 text-center">
@@ -292,18 +310,18 @@ export const UserManagement: React.FC = () => {
                     <td className="p-4 text-right">
                       {usr.id !== currentUser?.id ? (
                         <div className="flex items-center justify-end gap-2">
-                          {/* Edit Staff Account */}
+                          {/* Edit User Account */}
                           <button
                             onClick={() => openEditModal(usr)}
                             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-                            title="Edit User Name, Email & Password"
+                            title="Edit User Name, Email, Role & Password"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
 
-                          {/* Toggle Active / Inactive Status */}
+                          {/* Toggle Active / Inactive Status with Confirmation Prompt */}
                           <button
-                            onClick={() => handleToggleStatus(usr)}
+                            onClick={() => handleToggleStatusClick(usr)}
                             className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all border cursor-pointer ${
                               isActive
                                 ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
@@ -344,13 +362,13 @@ export const UserManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* CREATE STAFF ACCOUNT MODAL */}
+      {/* CREATE USER ACCOUNT MODAL WITH ROLE-SELECTION DROPDOWN */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-emerald-600" /> Create Authorized Staff Account
+                <UserPlus className="w-5 h-5 text-emerald-600" /> Create Authorized Account
               </h3>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -366,7 +384,7 @@ export const UserManagement: React.FC = () => {
             <form onSubmit={handleCreateStaff} className="space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Staff Full Name *
+                  Full Name *
                 </label>
                 <input
                   type="text"
@@ -380,16 +398,37 @@ export const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Staff Email Address (Login ID) *
+                  Email Address (Login ID) *
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="e.g. staff.ahmed@haidermemorial.edu.pk"
+                  placeholder="e.g. user.name@haidermemorial.edu.pk"
                   value={createEmail}
                   onChange={e => setCreateEmail(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
                 />
+              </div>
+
+              {/* Role Selection Dropdown */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                  <Briefcase className="w-3.5 h-3.5 text-emerald-600" /> Select User Role *
+                </label>
+                <select
+                  value={createRole}
+                  onChange={e => setCreateRole(e.target.value as UserRole)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold"
+                >
+                  {AVAILABLE_ROLES.map(r => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Full system authority is strictly for the CEO; other users operate with standard cashier access.
+                </p>
               </div>
 
               <div>
@@ -415,9 +454,9 @@ export const UserManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md cursor-pointer"
                 >
-                  Create Staff Account
+                  Create Account
                 </button>
               </div>
             </form>
@@ -425,13 +464,13 @@ export const UserManagement: React.FC = () => {
         </div>
       )}
 
-      {/* EDIT STAFF ACCOUNT MODAL */}
+      {/* EDIT USER ACCOUNT MODAL WITH ROLE-SELECTION DROPDOWN */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-indigo-600" /> Edit Staff Account & Credentials
+                <Edit3 className="w-5 h-5 text-indigo-600" /> Edit Account & Role Details
               </h3>
               <button onClick={() => setEditingStaff(null)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -447,7 +486,7 @@ export const UserManagement: React.FC = () => {
             <form onSubmit={handleSaveEditStaff} className="space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Staff Full Name *
+                  Full Name *
                 </label>
                 <input
                   type="text"
@@ -460,7 +499,7 @@ export const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Staff Email Address (Login ID) *
+                  Email Address (Login ID) *
                 </label>
                 <input
                   type="email"
@@ -471,9 +510,27 @@ export const UserManagement: React.FC = () => {
                 />
               </div>
 
+              {/* Role Selection Dropdown */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                  <Briefcase className="w-3.5 h-3.5 text-indigo-600" /> Assigned System Role *
+                </label>
+                <select
+                  value={editRole}
+                  onChange={e => setEditRole(e.target.value as UserRole)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold"
+                >
+                  {AVAILABLE_ROLES.map(r => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Password (Leave or Update)
+                  Password (Leave blank to keep unchanged)
                 </label>
                 <input
                   type="text"
@@ -509,10 +566,10 @@ export const UserManagement: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submittingEdit}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
-                  {submittingEdit ? 'Saving...' : 'Save Staff Changes'}
+                  {submittingEdit ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -564,7 +621,7 @@ export const UserManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-md hover:bg-indigo-700"
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-md hover:bg-indigo-700 cursor-pointer"
                 >
                   Update Password
                 </button>
@@ -574,11 +631,22 @@ export const UserManagement: React.FC = () => {
         </div>
       )}
 
+      {/* CONFIRMATION POPUP PROMPT FOR BLOCKING / UNBLOCKING USERS */}
+      {statusChangeTarget && (
+        <UserStatusConfirmModal
+          user={statusChangeTarget.user}
+          targetStatus={statusChangeTarget.targetStatus}
+          onConfirm={handleConfirmStatusChange}
+          onCancel={() => setStatusChangeTarget(null)}
+          loading={statusChangeLoading}
+        />
+      )}
+
       {/* DELETE STAFF CONFIRMATION DIALOG MODAL */}
       {deleteTarget && (
         <DeleteConfirmModal
           itemName={deleteTarget.full_name}
-          itemType="Staff User Account"
+          itemType="User Account"
           onConfirm={handleConfirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />
@@ -586,3 +654,4 @@ export const UserManagement: React.FC = () => {
     </div>
   );
 };
+

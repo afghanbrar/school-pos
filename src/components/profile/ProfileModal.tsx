@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
+import { formatRoleLabel, getRoleBadgeStyle } from '../../utils/roleUtils';
 
 interface ProfileModalProps {
   onClose: () => void;
@@ -128,15 +129,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
             </div>
           </div>
           <div>
-            {isPrincipal ? (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                <ShieldCheck className="w-3.5 h-3.5 mr-1" /> SUPER ADMIN
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                <UserCheck className="w-3.5 h-3.5 mr-1" /> STAFF CASHIER
-              </span>
-            )}
+            {(() => {
+              const badgeStyle = getRoleBadgeStyle(user?.role);
+              return (
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
+                  {isPrincipal ? (
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                  ) : (
+                    <UserCheck className="w-3.5 h-3.5 mr-1" />
+                  )}
+                  {formatRoleLabel(user?.role)}
+                </span>
+              );
+            })()}
           </div>
         </div>
 

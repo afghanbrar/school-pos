@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  ShieldCheck, 
-  UserCheck, 
   Lock, 
   Mail, 
   AlertCircle, 
   Building2, 
-  Eye,
-  EyeOff,
-  LogIn,
-  Key
+  Eye, 
+  EyeOff, 
+  LogIn, 
+  Key, 
+  ShieldCheck, 
+  UserCheck,
+  GraduationCap
 } from 'lucide-react';
 
 export const LoginModal: React.FC = () => {
   const { loginWithEmail } = useAuth();
-  const [loginType, setLoginType] = useState<'ceo' | 'staff'>('ceo');
   
-  // Login States
+  // Unified Login States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,15 +43,9 @@ export const LoginModal: React.FC = () => {
     }
   };
 
-  const setCeoCredentials = () => {
-    setEmail('ceo@haidermemorial.edu.pk');
-    setPassword('CeoMaster@2026');
-    setError(null);
-  };
-
-  const setStaffCredentials = () => {
-    setEmail('staff.ahmed@haidermemorial.edu.pk');
-    setPassword('password123');
+  const fillQuickCredentials = (e: string, p: string) => {
+    setEmail(e);
+    setPassword(p);
     setError(null);
   };
 
@@ -68,49 +62,10 @@ export const LoginModal: React.FC = () => {
             <Building2 className="w-7 h-7 text-emerald-200" />
           </div>
           <h2 className="text-xl font-extrabold tracking-tight">School POS & Enterprise Portal</h2>
-          <p className="text-emerald-200 text-xs font-medium mt-0.5">Secure Multi-User Financial System</p>
+          <p className="text-emerald-200 text-xs font-medium mt-0.5">Unified System Login</p>
         </div>
 
-        {/* Role Selection Tabs (CEO vs Staff) with High Contrast Hover States */}
         <div className="p-6">
-          <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-slate-800/90 p-1.5 rounded-2xl mb-5 text-xs">
-            <button
-              type="button"
-              onClick={() => { 
-                setLoginType('ceo'); 
-                setError(null); 
-                setEmail(''); 
-                setPassword(''); 
-              }}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold transition-all ${
-                loginType === 'ceo'
-                  ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-md ring-1 ring-emerald-500/20'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700/70'
-              }`}
-            >
-              <ShieldCheck className={`w-4 h-4 ${loginType === 'ceo' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
-              CEO (Super Admin)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { 
-                setLoginType('staff'); 
-                setError(null); 
-                setEmail(''); 
-                setPassword(''); 
-              }}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold transition-all ${
-                loginType === 'staff'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 shadow-md ring-1 ring-indigo-500/20'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700/70'
-              }`}
-            >
-              <UserCheck className={`w-4 h-4 ${loginType === 'staff' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
-              Staff Cashier
-            </button>
-          </div>
-
           {error && (
             <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-start gap-2.5 text-rose-700 dark:text-rose-300 text-xs leading-relaxed animate-shake">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
@@ -118,141 +73,96 @@ export const LoginModal: React.FC = () => {
             </div>
           )}
 
-          {/* 1. CEO SUPER ADMIN LOGIN */}
-          {loginType === 'ceo' && (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  CEO Official Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="ceo@haidermemorial.edu.pk"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                  />
-                </div>
+          {/* Unified Standard Login Form */}
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Official Email Address (Login ID)
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="e.g. user@haidermemorial.edu.pk"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Master Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs transition-all shadow-lg hover:shadow-emerald-900/30 disabled:opacity-50 flex items-center justify-center gap-2 mt-2 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                {submitting ? 'Authenticating CEO...' : 'Sign In as CEO (Super Admin)'}
-              </button>
-
-              {/* Quick Fill Helper for Demo / Testing */}
-              <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100 dark:border-slate-800">
-                <span>Default CEO Login:</span>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                />
                 <button
                   type="button"
-                  onClick={setCeoCredentials}
-                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
-                  <Key className="w-3 h-3" /> Auto-Fill CEO Credentials
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </form>
-          )}
+            </div>
 
-          {/* 2. STAFF CASHIER LOGIN */}
-          {loginType === 'staff' && (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Staff Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="staff.ahmed@haidermemorial.edu.pk"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
-                  />
-                </div>
-              </div>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs transition-all shadow-lg hover:shadow-emerald-900/30 disabled:opacity-50 flex items-center justify-center gap-2 mt-2 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              {submitting ? 'Authenticating & Loading Account...' : 'Sign In to School POS'}
+            </button>
+          </form>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Staff Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
+          {/* Quick-Fill Demo Short-Cuts for Convenience */}
+          <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+              <Key className="w-3 h-3 text-slate-400" /> Quick Demo Autofill:
+            </div>
+            <div className="grid grid-cols-3 gap-2">
               <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs transition-all shadow-lg hover:shadow-indigo-900/30 disabled:opacity-50 flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                type="button"
+                onClick={() => fillQuickCredentials('ceo@haidermemorial.edu.pk', 'CeoMaster@2026')}
+                className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer"
               >
-                <LogIn className="w-4 h-4" />
-                {submitting ? 'Verifying Staff Credentials...' : 'Sign In as Staff Cashier'}
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>CEO</span>
               </button>
 
-              <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100 dark:border-slate-800">
-                <span>Default Staff Login:</span>
-                <button
-                  type="button"
-                  onClick={setStaffCredentials}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Key className="w-3 h-3" /> Auto-Fill Staff Credentials
-                </button>
-              </div>
-            </form>
-          )}
+              <button
+                type="button"
+                onClick={() => fillQuickCredentials('staff.ahmed@haidermemorial.edu.pk', 'password123')}
+                className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Cashier</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fillQuickCredentials('principal@haidermemorial.edu.pk', 'password123')}
+                className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900 text-purple-800 dark:text-purple-300 text-[10px] font-bold border border-purple-200 dark:border-purple-800 transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
+                <span>Principal</span>
+              </button>
+            </div>
+          </div>
 
           <div className="pt-4 text-center text-[10px] font-semibold text-slate-400">
-            Authorized Personnel Only • School POS Multi-Tenant Enterprise System
+            Authorized Personnel Only • School POS Enterprise System
           </div>
         </div>
 

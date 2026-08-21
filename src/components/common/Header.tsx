@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Sun, Moon, LogOut, ShieldCheck, UserCheck, School } from 'lucide-react';
 import type { SchoolSettings } from '../../types';
+import { formatRoleLabel, getRoleBadgeStyle } from '../../utils/roleUtils';
 
 interface HeaderProps {
   activeTab: string;
@@ -96,15 +97,19 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, settings, onOpenSetti
                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">✎</span>
               </div>
               <div className="flex items-center justify-end gap-1">
-                {isPrincipal ? (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                    <ShieldCheck className="w-3 h-3 mr-0.5" /> CEO SUPER ADMIN
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                    <UserCheck className="w-3 h-3 mr-0.5" /> STAFF CASHIER
-                  </span>
-                )}
+                {(() => {
+                  const badgeStyle = getRoleBadgeStyle(user.role);
+                  return (
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
+                      {isPrincipal ? (
+                        <ShieldCheck className="w-3 h-3 mr-0.5 text-emerald-600" />
+                      ) : (
+                        <UserCheck className="w-3 h-3 mr-0.5 text-indigo-600" />
+                      )}
+                      {formatRoleLabel(user.role)}
+                    </span>
+                  );
+                })()}
               </div>
             </button>
 

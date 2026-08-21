@@ -124,23 +124,30 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
     // Auto-Open Cart as soon as product is clicked
     setIsCartOpen(true);
 
-    setCart(prev => {
-      const existingIndex = prev.findIndex(item => item.product.id === product.id);
-      if (existingIndex > -1) {
-        const existingQty = prev[existingIndex].quantity;
-        if (existingQty >= product.quantity) {
-          setErrorMsg(`Cannot add more than ${product.quantity} items available in inventory.`);
-          showToast('warning', 'Stock Limit Reached', `Available limit is ${product.quantity} units.`);
-          return prev;
-        }
-        const updated = [...prev];
-        updated[existingIndex].quantity += 1;
-        showToast('success', 'Cart Item Updated', `Added another "${product.name}" to cart.`);
-        return updated;
+    const existingIndex = cart.findIndex(item => item.product.id === product.id);
+    if (existingIndex > -1) {
+      const existingQty = cart[existingIndex].quantity;
+      if (existingQty >= product.quantity) {
+        setErrorMsg(`Cannot add more than ${product.quantity} items available in inventory.`);
+        showToast('warning', 'Stock Limit Reached', `Available limit is ${product.quantity} units.`);
+        return;
       }
-      showToast('success', 'Added to Cart', `Added "${product.name}" to cart.`);
-      return [...prev, { product, quantity: 1, selected_size: product.size, selected_color: product.color }];
-    });
+      setCart(prev => {
+        const updated = [...prev];
+        const idx = updated.findIndex(item => item.product.id === product.id);
+        if (idx > -1) {
+          updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + 1 };
+        }
+        return updated;
+      });
+      showToast('success', 'Cart Item Updated', `Added another "${product.name}" to cart.`, 1000);
+    } else {
+      setCart(prev => [
+        ...prev,
+        { product, quantity: 1, selected_size: product.size, selected_color: product.color }
+      ]);
+      showToast('success', 'Added to Cart', `Added "${product.name}" to cart.`, 1000);
+    }
   };
 
   const updateCartQty = (productId: string, delta: number) => {

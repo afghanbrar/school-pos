@@ -251,18 +251,6 @@ export const ExpenseLedgerManager: React.FC<ExpenseLedgerManagerProps> = ({ sett
     }
   };
 
-  const handleDeleteHandover = async (handoverId: string, handoverCode: string) => {
-    if (window.confirm(`Are you sure you want to permanently delete handover voucher record ${handoverCode}?`)) {
-      try {
-        await db.deleteCashHandover(handoverId);
-        showToast('delete', 'Handover Deleted', `Handover record ${handoverCode} has been deleted.`);
-        await loadLedgerData();
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete handover.');
-      }
-    }
-  };
-
   const pendingHandovers = handovers.filter(h => h.status === 'pending');
 
   return (
@@ -677,17 +665,6 @@ export const ExpenseLedgerManager: React.FC<ExpenseLedgerManagerProps> = ({ sett
                             <XCircle className="w-4 h-4" /> Reject / Cancel
                           </button>
                         </>
-                      )}
-
-                      {/* CEO Delete Handover Button */}
-                      {isPrincipal && (
-                        <button
-                          onClick={() => handleDeleteHandover(handover.id, handover.handover_code)}
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
-                          title="Delete Handover Record"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       )}
                     </div>
                   </div>

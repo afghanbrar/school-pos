@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { 
   UserProfile, 
+  UserRole,
   Category, 
   Product, 
   Transaction, 
@@ -89,7 +90,7 @@ class DatabaseService {
       // Subsequent loads: respect user deletions! Never re-inject deleted products/transactions/expenses.
       // Only safeguard: ensure at least one active CEO account exists so nobody is locked out.
       let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
-      const hasCeo = users.some(u => u.role === 'principal');
+      const hasCeo = users.some(u => u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk');
       if (!hasCeo) {
         users.unshift(INITIAL_USERS[0]);
         setItem(STORAGE_KEYS.USERS, users);
@@ -282,7 +283,7 @@ class DatabaseService {
 
   /* ================= AUTHENTICATION & USERS ================= */
 
-  public async registerUser(fullName: string, email: string, role: 'principal' | 'staff', password?: string): Promise<UserProfile> {
+  public async registerUser(fullName: string, email: string, role: UserRole = 'staff', password?: string): Promise<UserProfile> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -333,14 +334,14 @@ class DatabaseService {
     }
 
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-    const principal = users.find(u => u.role === 'principal');
-    if (!principal) throw new Error('CEO Super Admin account not found.');
-    if (principal.status === 'inactive') {
+    const ceo = users.find(u => u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk') || users.find(u => u.role === 'principal');
+    if (!ceo) throw new Error('CEO Super Admin account not found.');
+    if (ceo.status === 'inactive') {
       throw new Error('Super Admin account is currently deactivated.');
     }
 
-    setItem(STORAGE_KEYS.CURRENT_USER, principal);
-    return principal;
+    setItem(STORAGE_KEYS.CURRENT_USER, ceo);
+    return ceo;
   }
 
   public async loginWithEmail(email: string, pass: string): Promise<UserProfile> {
@@ -436,7 +437,7 @@ class DatabaseService {
     return users[index];
   }
 
-  public async createStaffUser(fullName: string, email: string, password?: string): Promise<UserProfile> {
+  public async createStaffUser(fullName: string, email: string, password?: string, role: UserRole = 'staff'): Promise<UserProfile> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -445,10 +446,10 @@ class DatabaseService {
     }
 
     const newUser: UserProfile = {
-      id: `usr-staff-${Date.now().toString().slice(-4)}`,
+      id: `usr-${role}-${Date.now().toString().slice(-4)}`,
       email: normalizedEmail,
       full_name: fullName.trim(),
-      role: 'staff',
+      role: role,
       status: 'active',
       password: password || 'password123',
       created_at: new Date().toISOString(),
@@ -474,9 +475,9 @@ class DatabaseService {
 
     await this.logActivity(
       'staff_created',
-      'New Staff User Account Created',
-      `Created staff account for ${newUser.full_name} (${newUser.email})`,
-      { staff_id: newUser.id, email: newUser.email }
+      'New User Account Created',
+      `Created ${role.toUpperCase()} account for ${newUser.full_name} (${newUser.email})`,
+      { staff_id: newUser.id, email: newUser.email, role: newUser.role }
     );
 
     return newUser;
@@ -484,7 +485,7 @@ class DatabaseService {
 
   public async updateStaffUser(
     userId: string,
-    updates: { full_name?: string; email?: string; password?: string; status?: UserStatus }
+    updates: { full_name?: string; email?: string; password?: string; status?: UserStatus; role?: UserRole }
   ): Promise<UserProfile> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const index = users.findIndex(u => u.id === userId);
@@ -507,7 +508,11 @@ class DatabaseService {
       users[index].password = updates.password;
     }
 
-    if (updates.status && users[index].role !== 'principal') {
+    if (updates.role && users[index].email !== 'ceo@haidermemorial.edu.pk') {
+      users[index].role = updates.role;
+    }
+
+    if (updates.status && users[index].role !== 'ceo' && users[index].email !== 'ceo@haidermemorial.edu.pk') {
       users[index].status = updates.status;
     }
 
@@ -519,6 +524,7 @@ class DatabaseService {
         await this.supabase.from('profiles').update({
           email: users[index].email,
           full_name: users[index].full_name,
+          role: users[index].role,
           status: users[index].status,
           updated_at: new Date().toISOString(),
         }).eq('id', userId);
@@ -530,8 +536,8 @@ class DatabaseService {
     await this.logActivity(
       'profile_updated',
       'Staff Account Details Updated',
-      `Updated profile for staff member ${users[index].full_name} (${users[index].email})`,
-      { staff_id: userId, email: users[index].email }
+      `Updated profile for ${users[index].full_name} (${users[index].email})`,
+      { staff_id: userId, email: users[index].email, role: users[index].role }
     );
 
     return users[index];
@@ -542,7 +548,7 @@ class DatabaseService {
     const index = users.findIndex(u => u.id === userId);
     if (index === -1) throw new Error('User not found.');
 
-    if (users[index].role === 'principal') {
+    if (users[index].role === 'ceo' || (users[index].role === 'principal' && users[index].email === 'ceo@haidermemorial.edu.pk')) {
       throw new Error('CEO Super Admin status cannot be set to inactive.');
     }
 
@@ -578,6 +584,10 @@ class DatabaseService {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const userToDelete = users.find(u => u.id === userId);
     if (!userToDelete) throw new Error('User account not found.');
+
+    if (userToDelete.role === 'ceo' || (userToDelete.role === 'principal' && userToDelete.email === 'ceo@haidermemorial.edu.pk')) {
+      throw new Error('CEO Super Admin account cannot be deleted.');
+    }
 
     const currentUser = this.getCurrentUser();
     if (currentUser && currentUser.id === userId) {
