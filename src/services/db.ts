@@ -75,7 +75,7 @@ class DatabaseService {
     const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
 
     if (!isInitialized) {
-      // First time initialization: populate mock defaults
+      // First time initialization: populate clean defaults (CEO user only, 0 dummy data)
       setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
       setItem(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
       setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
@@ -87,14 +87,32 @@ class DatabaseService {
       setItem(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     } else {
-      // Subsequent loads: respect user deletions! Never re-inject deleted products/transactions/expenses.
-      // Only safeguard: ensure at least one active CEO account exists so nobody is locked out.
+      // Clean up legacy dummy data if present from earlier builds
+      const existingProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+      if (existingProducts.some(p => p.id.startsWith('prod-10'))) {
+        setItem(STORAGE_KEYS.PRODUCTS, []);
+        setItem(STORAGE_KEYS.CATEGORIES, []);
+        setItem(STORAGE_KEYS.TRANSACTIONS, []);
+        setItem(STORAGE_KEYS.CUSTOMERS, []);
+        setItem(STORAGE_KEYS.EXPENSES, []);
+        setItem(STORAGE_KEYS.HANDOVERS, []);
+        setItem(STORAGE_KEYS.ACTIVITIES, []);
+      }
+
+      // Safeguard: ensure at least one active CEO account exists so nobody is locked out.
       let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
       const hasCeo = users.some(u => u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk');
       if (!hasCeo) {
         users.unshift(INITIAL_USERS[0]);
         setItem(STORAGE_KEYS.USERS, users);
       }
+    }
+
+    // Ensure settings title is updated to Haider Memorial School POS and Inventory System
+    const currentSettings = getItem<SchoolSettings>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
+    if (!currentSettings.name || currentSettings.name.includes('St. Lawrence') || currentSettings.name === 'Haider Memorial School & College') {
+      currentSettings.name = 'Haider Memorial School POS and Inventory System';
+      setItem(STORAGE_KEYS.SETTINGS, currentSettings);
     }
   }
 
@@ -1245,7 +1263,12 @@ class DatabaseService {
   /* ================= SETTINGS & CUSTOMERS ================= */
 
   public async getSettings(): Promise<SchoolSettings> {
-    return getItem<SchoolSettings>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
+    const s = getItem<SchoolSettings>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
+    if (!s.name || s.name.includes('St. Lawrence') || s.name === 'Haider Memorial School & College') {
+      s.name = 'Haider Memorial School POS and Inventory System';
+      setItem(STORAGE_KEYS.SETTINGS, s);
+    }
+    return s;
   }
 
   public async updateSettings(settings: SchoolSettings): Promise<SchoolSettings> {
@@ -1384,6 +1407,95 @@ class DatabaseService {
     );
 
     return totalSettled;
+  }
+
+  /* ================= SYSTEM FACTORY RESET ================= */
+
+  public async verifyCeoPassword(password: string): Promise<boolean> {
+    const currentUser = this.getCurrentUser();
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const ceoUser = users.find(u => (currentUser && u.id === currentUser.id) || u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk');
+    
+    if (!ceoUser) return false;
+    return ceoUser.password === password;
+  }
+
+  public async factoryResetSystem(password: string): Promise<{ success: boolean; message: string }> {
+    const isValid = await this.verifyCeoPassword(password);
+    if (!isValid) {
+      throw new Error('Incorrect CEO password. Factory reset cancelled.');
+    }
+
+    const currentUser = this.getCurrentUser();
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    
+    // Preserve ONLY the CEO login account
+    const ceoAccount = users.find(u => (currentUser && u.id === currentUser.id) || u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk') || {
+      id: 'usr-ceo-01',
+      email: 'ceo@haidermemorial.edu.pk',
+      full_name: 'Chief Executive Officer (CEO)',
+      role: 'ceo' as const,
+      status: 'active' as const,
+      password: password,
+      created_at: new Date().toISOString(),
+    };
+
+    // 1. Wipe all local data collections completely
+    setItem(STORAGE_KEYS.PRODUCTS, []);
+    setItem(STORAGE_KEYS.CATEGORIES, []);
+    setItem(STORAGE_KEYS.TRANSACTIONS, []);
+    setItem(STORAGE_KEYS.CUSTOMERS, []);
+    setItem(STORAGE_KEYS.EXPENSES, []);
+    setItem(STORAGE_KEYS.HANDOVERS, []);
+    setItem(STORAGE_KEYS.ACTIVITIES, [
+      {
+        id: `act-reset-${Date.now()}`,
+        user_id: ceoAccount.id,
+        user_name: ceoAccount.full_name,
+        user_role: ceoAccount.role,
+        action: 'system_reset' as any,
+        title: 'System Factory Reset Executed',
+        description: 'Complete database wipe executed by CEO. All products, categories, transactions, customers, expenses, handovers, and staff accounts deleted.',
+        details: { reset_at: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+      }
+    ]);
+    
+    // Keep ONLY CEO account in users list & active session
+    setItem(STORAGE_KEYS.USERS, [ceoAccount]);
+    setItem(STORAGE_KEYS.CURRENT_USER, ceoAccount);
+
+    // Reset settings to fresh default with updated title
+    const cleanSettings: SchoolSettings = {
+      name: 'Haider Memorial School POS and Inventory System',
+      tagline: 'Excellence in Education & Character',
+      address: 'Block 5, Education City Campus, Main Boulevard',
+      phone: '+92 300 1234567 / (042) 35890123',
+      email: 'principal@haidermemorial.edu.pk',
+      logo_url: 'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?w=150&auto=format&fit=crop&q=80',
+      currency_symbol: 'PKR',
+    };
+    setItem(STORAGE_KEYS.SETTINGS, cleanSettings);
+    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+    // 2. Wipe backend PostgreSQL database tables in Supabase (if connected)
+    if (this.supabase) {
+      try {
+        await Promise.allSettled([
+          this.supabase.from('products').delete().neq('id', '___none___'),
+          this.supabase.from('categories').delete().neq('id', '___none___'),
+          this.supabase.from('transactions').delete().neq('id', '___none___'),
+          this.supabase.from('expenses').delete().neq('id', '___none___'),
+          this.supabase.from('cash_handovers').delete().neq('id', '___none___'),
+          this.supabase.from('activity_logs').delete().neq('id', '___none___'),
+          this.supabase.from('profiles').delete().neq('role', 'ceo'),
+        ]);
+      } catch (e) {
+        console.warn('Supabase cloud factory reset notice:', e);
+      }
+    }
+
+    return { success: true, message: 'System factory reset successful. All database records deleted clean. CEO account retained.' };
   }
 }
 

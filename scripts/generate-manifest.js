@@ -6,10 +6,12 @@ const tauriConfigPath = path.resolve('src-tauri/tauri.conf.json');
 const tauriConfig = JSON.parse(fs.readFileSync(tauriConfigPath, 'utf-8'));
 const version = tauriConfig.version || '1.0.0';
 
-// Find sig file in nsis bundle
+// Find sig file in nsis bundle matching current version
 const nsisDir = path.resolve('src-tauri/target/release/bundle/nsis');
 const files = fs.existsSync(nsisDir) ? fs.readdirSync(nsisDir) : [];
-const sigFile = files.find(f => f.endsWith('.sig'));
+const sigFile = files.find(f => f.includes(version) && f.endsWith('.exe.sig')) || 
+                files.find(f => f.includes(version) && f.endsWith('.sig')) || 
+                files.find(f => f.endsWith('.exe.sig'));
 
 if (!sigFile) {
   console.error('❌ Signature file (.sig) not found in src-tauri/target/release/bundle/nsis. Please run npm run tauri:build first.');
