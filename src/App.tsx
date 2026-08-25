@@ -68,7 +68,7 @@ const MainAppContent: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        <main className="flex-1 h-full overflow-y-auto">
+        <main className={`flex-1 h-full ${activeTab === 'pos' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {activeTab === 'pos' && <PosTerminal settings={settings} />}
           {activeTab === 'inventory' && <InventoryManager settings={settings} />}
           {activeTab === 'ledger' && <ExpenseLedgerManager settings={settings} />}
