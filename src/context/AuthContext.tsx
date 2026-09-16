@@ -63,13 +63,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
-    setLoading(true);
-    try {
-      const loggedUser = await db.loginWithEmail(email, pass);
-      setUser(loggedUser);
-    } finally {
-      setLoading(false);
-    }
+    // Note: Do NOT toggle global loading here; LoginModal manages its own submitting state.
+    // Toggling global loading unmounts LoginModal in App.tsx, wiping input credentials on error.
+    const loggedUser = await db.loginWithEmail(email, pass);
+    setUser(loggedUser);
   };
 
   const registerUser = async (fullName: string, email: string, role: UserRole = 'staff', password?: string) => {

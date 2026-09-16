@@ -68,7 +68,9 @@ class DatabaseService {
   constructor() {
     this.initLocalDefaults();
     this.initSupabaseClient();
-    this.syncLocalToSupabase();
+    this.syncSupabaseToLocal().finally(() => {
+      this.syncLocalToSupabase();
+    });
   }
 
   private initLocalDefaults() {
@@ -152,6 +154,127 @@ class DatabaseService {
   }
 
   /**
+   * Pull live categories, products, profiles, and transactions from Supabase into local cache
+   */
+  public async syncSupabaseToLocal(): Promise<{ success: boolean; message: string }> {
+    if (!this.supabase) {
+      return { success: false, message: 'Supabase client is not connected.' };
+    }
+
+    try {
+      // 1. Pull User Profiles
+      const { data: remoteProfiles, error: pErr } = await this.supabase.from('profiles').select('*');
+      if (!pErr && remoteProfiles && remoteProfiles.length > 0) {
+        const localUsers = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+        const mergedUsers = [...localUsers];
+        for (const rp of remoteProfiles) {
+          const normEmail = (rp.email || '').toLowerCase().trim();
+          if (!normEmail) continue;
+          const existingIdx = mergedUsers.findIndex(
+            u => u.id === rp.id || u.email.toLowerCase() === normEmail
+          );
+          const mappedRole: UserRole = (rp.role === 'principal' || rp.role === 'ceo' || normEmail === 'ceo@haidermemorial.edu.pk') ? 'ceo' : (rp.role as UserRole);
+
+          if (existingIdx >= 0) {
+            mergedUsers[existingIdx] = {
+              ...mergedUsers[existingIdx],
+              full_name: rp.full_name || mergedUsers[existingIdx].full_name,
+              email: rp.email,
+              role: mappedRole,
+              status: rp.status || 'active',
+              password: (rp as any).password || mergedUsers[existingIdx].password || (normEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : 'password123'),
+            };
+          } else {
+            mergedUsers.push({
+              id: rp.id,
+              email: rp.email,
+              full_name: rp.full_name,
+              role: mappedRole,
+              status: rp.status || 'active',
+              password: (rp as any).password || (normEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : 'password123'),
+              created_at: rp.created_at || new Date().toISOString(),
+            });
+          }
+        }
+        setItem(STORAGE_KEYS.USERS, mergedUsers);
+      }
+
+      // 2. Pull Categories
+      const { data: remoteCategories, error: cErr } = await this.supabase.from('categories').select('*');
+      if (!cErr && remoteCategories && remoteCategories.length > 0) {
+        const mergedCategories: Category[] = remoteCategories.map(c => ({
+          id: c.id,
+          name: c.name,
+          description: c.description || '',
+          icon_name: c.icon_name || 'Tag',
+          created_at: c.created_at || new Date().toISOString(),
+        }));
+        setItem(STORAGE_KEYS.CATEGORIES, mergedCategories);
+      }
+
+      // 3. Pull Products
+      const { data: remoteProducts, error: prErr } = await this.supabase.from('products').select('*');
+      if (!prErr && remoteProducts && remoteProducts.length > 0) {
+        const mergedProducts: Product[] = remoteProducts.map(p => ({
+          id: p.id,
+          sku: p.sku,
+          name: p.name,
+          category_id: p.category_id,
+          cost_price: Number(p.cost_price) || 0,
+          sale_price: Number(p.sale_price) || 0,
+          quantity: Number(p.quantity) || 0,
+          size: p.size || null,
+          color: p.color || null,
+          variant: p.variant || null,
+          wholesaler_name: p.wholesaler_name || null,
+          wholesaler_details: p.wholesaler_details || null,
+          purchase_payment_channel: p.purchase_payment_channel || null,
+          purchased_by: p.purchased_by || null,
+          created_at: p.created_at || new Date().toISOString(),
+          updated_at: p.updated_at || new Date().toISOString(),
+        }));
+        setItem(STORAGE_KEYS.PRODUCTS, mergedProducts);
+      }
+
+      // 4. Pull Transactions
+      const { data: remoteTransactions, error: txErr } = await this.supabase.from('transactions').select('*');
+      if (!txErr && remoteTransactions && remoteTransactions.length > 0) {
+        const localTx = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+        const txMap = new Map<string, Transaction>();
+        localTx.forEach(t => txMap.set(t.id, t));
+
+        remoteTransactions.forEach(t => {
+          const existing = txMap.get(t.id);
+          txMap.set(t.id, {
+            id: t.id,
+            invoice_number: t.invoice_number,
+            buyer_type: t.buyer_type,
+            buyer_name: t.buyer_name,
+            student_roll_no: t.student_roll_no || undefined,
+            student_class: t.student_class || undefined,
+            school_name: t.school_name || undefined,
+            staff_id: t.staff_id,
+            total_amount: Number(t.total_amount) || 0,
+            discount: Number(t.discount) || 0,
+            paid_amount: Number(t.paid_amount) || 0,
+            pending_amount: Number(t.pending_amount) || 0,
+            payment_method: t.payment_method,
+            notes: t.notes || undefined,
+            created_at: t.created_at,
+            items: existing?.items || [],
+          });
+        });
+        setItem(STORAGE_KEYS.TRANSACTIONS, Array.from(txMap.values()));
+      }
+
+      return { success: true, message: 'Cloud database synchronized with local system.' };
+    } catch (e: any) {
+      console.warn('Supabase to local pull notice:', e);
+      return { success: false, message: e.message || 'Supabase fetch failed.' };
+    }
+  }
+
+  /**
    * Migrate local categories, products, profiles, transactions, expenses, handovers, activities to live Supabase
    */
   public async syncLocalToSupabase(): Promise<{ success: boolean; message: string }> {
@@ -209,7 +332,7 @@ class DatabaseService {
             id: u.id,
             email: u.email,
             full_name: u.full_name,
-            role: u.role,
+            role: (u.role === 'ceo' ? 'principal' : (u.role || 'staff')),
             status: u.status,
             created_at: u.created_at || new Date().toISOString(),
           }))
@@ -363,10 +486,62 @@ class DatabaseService {
   }
 
   public async loginWithEmail(email: string, pass: string): Promise<UserProfile> {
-    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const normalizedEmail = email.trim().toLowerCase();
 
-    const user = users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (!normalizedEmail) {
+      throw new Error('Please enter your email address.');
+    }
+    if (!pass) {
+      throw new Error('Please enter your password.');
+    }
+
+    // 1. If Supabase is connected, check live profiles to ensure fresh sync
+    if (this.supabase) {
+      try {
+        const { data: remoteProfile, error: pErr } = await this.supabase
+          .from('profiles')
+          .select('*')
+          .ilike('email', normalizedEmail)
+          .maybeSingle();
+
+        if (!pErr && remoteProfile) {
+          const currentUsers = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+          const existingIdx = currentUsers.findIndex(
+            u => u.id === remoteProfile.id || u.email.toLowerCase() === normalizedEmail
+          );
+          const mappedRole: UserRole = (remoteProfile.role === 'principal' || remoteProfile.role === 'ceo' || normalizedEmail === 'ceo@haidermemorial.edu.pk') ? 'ceo' : (remoteProfile.role as UserRole);
+
+          const syncedProfile: UserProfile = {
+            id: remoteProfile.id,
+            email: remoteProfile.email,
+            full_name: remoteProfile.full_name,
+            role: mappedRole,
+            status: remoteProfile.status || 'active',
+            password: (remoteProfile as any).password || (existingIdx >= 0 ? currentUsers[existingIdx].password : undefined) || (normalizedEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : 'password123'),
+            created_at: remoteProfile.created_at || new Date().toISOString(),
+          };
+
+          if (existingIdx >= 0) {
+            currentUsers[existingIdx] = syncedProfile;
+          } else {
+            currentUsers.push(syncedProfile);
+          }
+          setItem(STORAGE_KEYS.USERS, currentUsers);
+        }
+      } catch (e) {
+        console.warn('Live profile fetch attempt notice:', e);
+      }
+    }
+
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    let user = users.find(u => u.email.toLowerCase() === normalizedEmail);
+
+    // Safeguard for default CEO account
+    if (!user && normalizedEmail === 'ceo@haidermemorial.edu.pk') {
+      user = INITIAL_USERS[0];
+      users.unshift(user);
+      setItem(STORAGE_KEYS.USERS, users);
+    }
 
     if (!user) {
       throw new Error('Invalid email or password. Please verify your credentials.');
@@ -376,11 +551,11 @@ class DatabaseService {
       throw new Error('ACCESS DENIED: Your account has been deactivated by CEO. Please contact administration.');
     }
 
-    if (!pass) {
-      throw new Error('Password is required.');
-    }
+    // CEO Master Account override
+    const isCeoMaster = (user.role === 'ceo' || normalizedEmail === 'ceo@haidermemorial.edu.pk') && pass === 'CeoMaster@2026';
+    const isPasswordMatch = isCeoMaster || (user.password && user.password === pass);
 
-    if (user.password && user.password !== pass) {
+    if (!isPasswordMatch) {
       throw new Error('Invalid password. Please check your credentials.');
     }
 
@@ -397,7 +572,12 @@ class DatabaseService {
   }
 
   public async getUsers(): Promise<UserProfile[]> {
-    return getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    if (users.length <= 1 && this.supabase) {
+      await this.syncSupabaseToLocal();
+      users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    }
+    return users;
   }
 
   public async updateUserProfile(
@@ -542,7 +722,7 @@ class DatabaseService {
         await this.supabase.from('profiles').update({
           email: users[index].email,
           full_name: users[index].full_name,
-          role: users[index].role,
+          role: (users[index].role === 'ceo' ? 'principal' : (users[index].role || 'staff')),
           status: users[index].status,
           updated_at: new Date().toISOString(),
         }).eq('id', userId);
@@ -634,7 +814,12 @@ class DatabaseService {
   /* ================= CATEGORIES & PRODUCTS (INVENTORY) ================= */
 
   public async getCategories(): Promise<Category[]> {
-    return getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    let cats = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    if ((!cats || cats.length === 0) && this.supabase) {
+      await this.syncSupabaseToLocal();
+      cats = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    }
+    return cats;
   }
 
   public async createCategory(name: string, description?: string, icon_name?: string): Promise<Category> {
@@ -700,7 +885,12 @@ class DatabaseService {
   }
 
   public async getProducts(): Promise<Product[]> {
-    return getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    let prods = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    if ((!prods || prods.length === 0) && this.supabase) {
+      await this.syncSupabaseToLocal();
+      prods = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    }
+    return prods;
   }
 
   public async addProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
@@ -827,7 +1017,12 @@ class DatabaseService {
   /* ================= TRANSACTIONS (POS SALES) ================= */
 
   public async getTransactions(): Promise<Transaction[]> {
-    return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, INITIAL_PRODUCTS.length ? generateSampleTransactions() : []);
+    let txs = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    if ((!txs || txs.length === 0) && this.supabase) {
+      await this.syncSupabaseToLocal();
+      txs = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    }
+    return txs;
   }
 
   public async createTransaction(txData: Omit<Transaction, 'id' | 'invoice_number' | 'created_at'>): Promise<Transaction> {

@@ -17,6 +17,7 @@ import { RecentActivityFeed } from './components/activity/RecentActivityFeed';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ProfileModal } from './components/profile/ProfileModal';
 import { OfflineModal } from './components/common/OfflineModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import type { SchoolSettings } from './types';
 import { db } from './services/db';
 import { Loader2 } from 'lucide-react';
@@ -30,6 +31,10 @@ const MainAppContent: React.FC = () => {
 
   useEffect(() => {
     loadSettings();
+    // Pull latest live cloud data (profiles, categories, products, transactions) on app startup
+    db.syncSupabaseToLocal().catch(err => {
+      console.warn('Initial cloud sync notice:', err);
+    });
   }, []);
 
   const loadSettings = async () => {
@@ -102,13 +107,15 @@ const MainAppContent: React.FC = () => {
 
 export function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <MainAppContent />
-        </ToastProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <MainAppContent />
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
