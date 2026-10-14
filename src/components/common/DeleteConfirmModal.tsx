@@ -5,6 +5,7 @@ interface DeleteConfirmModalProps {
   title?: string;
   itemName: string;
   itemType: string;
+  message?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -13,6 +14,7 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   title = 'Confirm Deletion',
   itemName,
   itemType,
+  message,
   onConfirm,
   onCancel,
 }) => {
@@ -35,7 +37,9 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
         {/* Warning Body */}
         <div className="space-y-2 text-xs">
           <p className="text-slate-600 dark:text-slate-300">
-            Are you sure you want to delete the following <span className="font-semibold">{itemType.toLowerCase()}</span> from inventory?
+            {message || (
+              <>Are you sure you want to delete the following <span className="font-semibold">{itemType.toLowerCase()}</span> from inventory?</>
+            )}
           </p>
 
           <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-100 dark:border-rose-900 text-rose-900 dark:text-rose-200 font-bold flex items-center gap-2">

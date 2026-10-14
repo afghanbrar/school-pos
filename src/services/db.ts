@@ -18,7 +18,6 @@ import {
   INITIAL_USERS, 
   INITIAL_CATEGORIES, 
   INITIAL_PRODUCTS, 
-  generateSampleTransactions,
   INITIAL_SETTINGS,
   INITIAL_CUSTOMERS,
   INITIAL_EXPENSES,
@@ -30,17 +29,17 @@ const DEFAULT_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ektqw
 const DEFAULT_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrdHF3cG5zcXFucnVrdWJubWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NDUzNDMsImV4cCI6MjEwMTMyMTM0M30.WQTHB6qyn4Aah9zZlSfllqZCL5RHVzN1ZdCYFw0oMbA';
 
 const STORAGE_KEYS = {
-  USERS: 'school_pos_users_v3',
-  CATEGORIES: 'school_pos_categories_v3',
-  PRODUCTS: 'school_pos_products_v3',
-  TRANSACTIONS: 'school_pos_transactions_v3',
-  SETTINGS: 'school_pos_settings_v3',
-  CUSTOMERS: 'school_pos_customers_v3',
-  CURRENT_USER: 'school_pos_current_user_v3',
-  EXPENSES: 'school_pos_expenses_v3',
-  HANDOVERS: 'school_pos_handovers_v3',
-  ACTIVITIES: 'school_pos_activities_v3',
-  INITIALIZED: 'school_pos_initialized_flag_v3',
+  USERS: 'school_pos_users_v4',
+  CATEGORIES: 'school_pos_categories_v4',
+  PRODUCTS: 'school_pos_products_v4',
+  TRANSACTIONS: 'school_pos_transactions_v4',
+  SETTINGS: 'school_pos_settings_v4',
+  CUSTOMERS: 'school_pos_customers_v4',
+  CURRENT_USER: 'school_pos_current_user_v4',
+  EXPENSES: 'school_pos_expenses_v4',
+  HANDOVERS: 'school_pos_handovers_v4',
+  ACTIVITIES: 'school_pos_activities_v4',
+  INITIALIZED: 'school_pos_initialized_flag_v4',
   SUPABASE_URL: 'school_pos_supabase_url',
   SUPABASE_KEY: 'school_pos_supabase_key',
 };
@@ -74,22 +73,36 @@ class DatabaseService {
   }
 
   private initLocalDefaults() {
+    // Purge legacy storage versions
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.includes('_v1') || k.includes('_v2') || k.includes('_v3'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+
     const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
 
     if (!isInitialized) {
-      // First time initialization: populate clean defaults (CEO user only, 0 dummy data)
+      // First time initialization: populate fresh defaults (CEO + Rubina Iftikhar as Principal, zero dummy data)
       setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
-      setItem(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-      setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-      setItem(STORAGE_KEYS.TRANSACTIONS, generateSampleTransactions());
+      setItem(STORAGE_KEYS.CATEGORIES, []);
+      setItem(STORAGE_KEYS.PRODUCTS, []);
+      setItem(STORAGE_KEYS.TRANSACTIONS, []);
       setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
-      setItem(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
-      setItem(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
-      setItem(STORAGE_KEYS.HANDOVERS, INITIAL_HANDOVERS);
-      setItem(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
+      setItem(STORAGE_KEYS.CUSTOMERS, []);
+      setItem(STORAGE_KEYS.EXPENSES, []);
+      setItem(STORAGE_KEYS.HANDOVERS, []);
+      setItem(STORAGE_KEYS.ACTIVITIES, []);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     } else {
-      // Clean up legacy dummy data if present from earlier builds
+      // Ensure products, categories, transactions, expenses, handovers, activities are clean zero state
       const existingProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
       if (existingProducts.some(p => p.id.startsWith('prod-10'))) {
         setItem(STORAGE_KEYS.PRODUCTS, []);
@@ -101,13 +114,33 @@ class DatabaseService {
         setItem(STORAGE_KEYS.ACTIVITIES, []);
       }
 
-      // Safeguard: ensure at least one active CEO account exists so nobody is locked out.
+      // Safeguard: ensure CEO and Rubina Iftikhar accounts exist, remove demo/test accounts
       let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
+      users = users.filter(u => 
+        !u.email.toLowerCase().includes('demo') && 
+        !u.email.toLowerCase().includes('test') &&
+        u.email !== 'staff@haidermemorial.edu.pk'
+      );
+
       const hasCeo = users.some(u => u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk');
       if (!hasCeo) {
         users.unshift(INITIAL_USERS[0]);
-        setItem(STORAGE_KEYS.USERS, users);
       }
+
+      const hasRubina = users.some(u => u.email.toLowerCase() === 'bina.iftikhar@gmail.com');
+      if (!hasRubina && INITIAL_USERS[1]) {
+        users.push(INITIAL_USERS[1]);
+      } else if (hasRubina) {
+        const idx = users.findIndex(u => u.email.toLowerCase() === 'bina.iftikhar@gmail.com');
+        if (idx >= 0) {
+          users[idx].role = 'principal';
+          users[idx].gender = 'female';
+          users[idx].full_name = 'Rubina Iftikhar';
+          if (!users[idx].password) users[idx].password = '12345678';
+        }
+      }
+
+      setItem(STORAGE_KEYS.USERS, users);
     }
 
     // Ensure settings title is updated to Haider Memorial School POS and Inventory System
@@ -173,7 +206,9 @@ class DatabaseService {
           const existingIdx = mergedUsers.findIndex(
             u => u.id === rp.id || u.email.toLowerCase() === normEmail
           );
-          const mappedRole: UserRole = (rp.role === 'principal' || rp.role === 'ceo' || normEmail === 'ceo@haidermemorial.edu.pk') ? 'ceo' : (rp.role as UserRole);
+          const mappedRole: UserRole = (rp.role === 'ceo' || normEmail === 'ceo@haidermemorial.edu.pk') 
+            ? 'ceo' 
+            : ((rp.role === 'principal' || normEmail === 'bina.iftikhar@gmail.com') ? 'principal' : (rp.role as UserRole));
 
           if (existingIdx >= 0) {
             mergedUsers[existingIdx] = {
@@ -182,7 +217,7 @@ class DatabaseService {
               email: rp.email,
               role: mappedRole,
               status: rp.status || 'active',
-              password: (rp as any).password || mergedUsers[existingIdx].password || (normEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : 'password123'),
+              password: (rp as any).password || mergedUsers[existingIdx].password || (normEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : (normEmail === 'bina.iftikhar@gmail.com' ? '12345678' : 'password123')),
             };
           } else {
             mergedUsers.push({
@@ -191,7 +226,7 @@ class DatabaseService {
               full_name: rp.full_name,
               role: mappedRole,
               status: rp.status || 'active',
-              password: (rp as any).password || (normEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : 'password123'),
+              password: (rp as any).password || (normEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : (normEmail === 'bina.iftikhar@gmail.com' ? '12345678' : 'password123')),
               created_at: rp.created_at || new Date().toISOString(),
             });
           }
@@ -509,7 +544,9 @@ class DatabaseService {
           const existingIdx = currentUsers.findIndex(
             u => u.id === remoteProfile.id || u.email.toLowerCase() === normalizedEmail
           );
-          const mappedRole: UserRole = (remoteProfile.role === 'principal' || remoteProfile.role === 'ceo' || normalizedEmail === 'ceo@haidermemorial.edu.pk') ? 'ceo' : (remoteProfile.role as UserRole);
+          const mappedRole: UserRole = (remoteProfile.role === 'ceo' || normalizedEmail === 'ceo@haidermemorial.edu.pk')
+            ? 'ceo'
+            : ((remoteProfile.role === 'principal' || normalizedEmail === 'bina.iftikhar@gmail.com') ? 'principal' : (remoteProfile.role as UserRole));
 
           const syncedProfile: UserProfile = {
             id: remoteProfile.id,
@@ -517,7 +554,8 @@ class DatabaseService {
             full_name: remoteProfile.full_name,
             role: mappedRole,
             status: remoteProfile.status || 'active',
-            password: (remoteProfile as any).password || (existingIdx >= 0 ? currentUsers[existingIdx].password : undefined) || (normalizedEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : 'password123'),
+            gender: (remoteProfile as any).gender || (existingIdx >= 0 ? currentUsers[existingIdx].gender : (normalizedEmail === 'bina.iftikhar@gmail.com' ? 'female' : 'male')),
+            password: (remoteProfile as any).password || (existingIdx >= 0 ? currentUsers[existingIdx].password : undefined) || (normalizedEmail === 'ceo@haidermemorial.edu.pk' ? 'CeoMaster@2026' : (normalizedEmail === 'bina.iftikhar@gmail.com' ? '12345678' : 'password123')),
             created_at: remoteProfile.created_at || new Date().toISOString(),
           };
 
@@ -536,10 +574,23 @@ class DatabaseService {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     let user = users.find(u => u.email.toLowerCase() === normalizedEmail);
 
-    // Safeguard for default CEO account
+    // Safeguard for default CEO and Principal accounts
     if (!user && normalizedEmail === 'ceo@haidermemorial.edu.pk') {
       user = INITIAL_USERS[0];
       users.unshift(user);
+      setItem(STORAGE_KEYS.USERS, users);
+    } else if (!user && normalizedEmail === 'bina.iftikhar@gmail.com') {
+      user = INITIAL_USERS[1] || {
+        id: 'usr-principal-01',
+        email: 'bina.iftikhar@gmail.com',
+        full_name: 'Rubina Iftikhar',
+        role: 'principal',
+        gender: 'female',
+        status: 'active',
+        password: '12345678',
+        created_at: new Date().toISOString(),
+      };
+      users.push(user);
       setItem(STORAGE_KEYS.USERS, users);
     }
 
@@ -551,9 +602,10 @@ class DatabaseService {
       throw new Error('ACCESS DENIED: Your account has been deactivated by CEO. Please contact administration.');
     }
 
-    // CEO Master Account override
+    // Master Account overrides
     const isCeoMaster = (user.role === 'ceo' || normalizedEmail === 'ceo@haidermemorial.edu.pk') && pass === 'CeoMaster@2026';
-    const isPasswordMatch = isCeoMaster || (user.password && user.password === pass);
+    const isPrincipalMaster = (user.role === 'principal' || normalizedEmail === 'bina.iftikhar@gmail.com') && pass === '12345678';
+    const isPasswordMatch = isCeoMaster || isPrincipalMaster || (user.password && user.password === pass);
 
     if (!isPasswordMatch) {
       throw new Error('Invalid password. Please check your credentials.');
@@ -635,7 +687,7 @@ class DatabaseService {
     return users[index];
   }
 
-  public async createStaffUser(fullName: string, email: string, password?: string, role: UserRole = 'staff'): Promise<UserProfile> {
+  public async createStaffUser(fullName: string, email: string, password?: string, role: UserRole = 'staff', gender?: string): Promise<UserProfile> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -648,6 +700,7 @@ class DatabaseService {
       email: normalizedEmail,
       full_name: fullName.trim(),
       role: role,
+      gender: gender || 'male',
       status: 'active',
       password: password || 'password123',
       created_at: new Date().toISOString(),
@@ -683,7 +736,7 @@ class DatabaseService {
 
   public async updateStaffUser(
     userId: string,
-    updates: { full_name?: string; email?: string; password?: string; status?: UserStatus; role?: UserRole }
+    updates: { full_name?: string; email?: string; password?: string; status?: UserStatus; role?: UserRole; gender?: string }
   ): Promise<UserProfile> {
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const index = users.findIndex(u => u.id === userId);
@@ -700,6 +753,10 @@ class DatabaseService {
 
     if (updates.full_name) {
       users[index].full_name = updates.full_name.trim();
+    }
+
+    if (updates.gender) {
+      users[index].gender = updates.gender;
     }
 
     if (updates.password) {
@@ -779,15 +836,20 @@ class DatabaseService {
   }
 
   public async deleteStaffUser(userId: string): Promise<void> {
+    const currentUser = this.getCurrentUser();
+    const isCeo = currentUser && (currentUser.role === 'ceo' || currentUser.email === 'ceo@haidermemorial.edu.pk');
+    if (!isCeo) {
+      throw new Error('Sirf CEO (Super Admin) hi user accounts delete kar sakta hy. You do not have permission to delete user accounts.');
+    }
+
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     const userToDelete = users.find(u => u.id === userId);
     if (!userToDelete) throw new Error('User account not found.');
 
-    if (userToDelete.role === 'ceo' || (userToDelete.role === 'principal' && userToDelete.email === 'ceo@haidermemorial.edu.pk')) {
+    if (userToDelete.role === 'ceo' || userToDelete.email === 'ceo@haidermemorial.edu.pk') {
       throw new Error('CEO Super Admin account cannot be deleted.');
     }
 
-    const currentUser = this.getCurrentUser();
     if (currentUser && currentUser.id === userId) {
       throw new Error('You cannot delete your own active logged-in CEO account.');
     }
@@ -1656,8 +1718,9 @@ class DatabaseService {
       }
     ]);
     
-    // Keep ONLY CEO account in users list & active session
-    setItem(STORAGE_KEYS.USERS, [ceoAccount]);
+    // Preserve CEO and Rubina Iftikhar (Principal) accounts in users list & active session
+    const principalAccount = users.find(u => u.email.toLowerCase() === 'bina.iftikhar@gmail.com') || INITIAL_USERS[1];
+    setItem(STORAGE_KEYS.USERS, [ceoAccount, principalAccount]);
     setItem(STORAGE_KEYS.CURRENT_USER, ceoAccount);
 
     // Reset settings to fresh default with updated title

@@ -27,7 +27,17 @@ export const INITIAL_USERS: UserProfile[] = [
     role: 'ceo',
     status: 'active',
     password: 'CeoMaster@2026',
-    created_at: new Date(Date.now() - 365 * 86400000).toISOString(),
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'usr-principal-01',
+    email: 'bina.iftikhar@gmail.com',
+    full_name: 'Rubina Iftikhar',
+    role: 'principal',
+    gender: 'female',
+    status: 'active',
+    password: '12345678',
+    created_at: new Date().toISOString(),
   },
 ];
 

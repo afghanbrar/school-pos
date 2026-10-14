@@ -28,7 +28,7 @@ const manifest = {
   platforms: {
     'windows-x86_64': {
       signature: sigContent,
-      url: `https://github.com/DoctorOfCoding/school-pos/releases/download/v${version}/${encodeURIComponent(exeFile)}`
+      url: `https://github.com/afghanbrar/school-pos/releases/download/v${version}/${encodeURIComponent(exeFile)}`
     }
   }
 };

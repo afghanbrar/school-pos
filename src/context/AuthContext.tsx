@@ -95,10 +95,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  // Full system authority is strictly for the CEO; other users have standard staff restrictions.
+  // CEO is Super Admin with full authority (including deleting user accounts)
   const isCeo = user?.role === 'ceo' || user?.email === 'ceo@haidermemorial.edu.pk';
-  const isPrincipal = isCeo; // Maps to Super Admin full authority
-  const isStaff = !isCeo;
+  // Principal has administrative authority across modules (Staff Management, Financials, Analytics, Inventory, POS, etc.)
+  const isPrincipal = isCeo || user?.role === 'principal' || user?.email === 'bina.iftikhar@gmail.com';
+  const isStaff = !isCeo && !isPrincipal;
 
   return (
     <AuthContext.Provider

@@ -7,6 +7,7 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   status: UserStatus;
+  gender?: 'female' | 'male' | 'other' | string;
   password?: string;
   created_at: string;
 }

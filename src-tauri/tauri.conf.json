@@ -39,7 +39,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVCRkFBQTQ0RkNFNDA2M0IKUldRN0J1VDhSS3I2V3dJN1pHLzdCWFFOcHE1OGYrOGVpbDlvb1lLUWxNWjBRMmJtem15akgxZWkK",
       "endpoints": [
-        "https://github.com/DoctorOfCoding/school-pos/releases/latest/download/latest.json"
+        "https://github.com/afghanbrar/school-pos/releases/latest/download/latest.json"
       ]
     }
   }

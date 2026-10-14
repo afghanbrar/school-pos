@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { 
   ShieldCheck, 
+  ShieldAlert,
   UserPlus, 
   Key, 
   UserX, 
@@ -24,7 +25,7 @@ import { UserStatusConfirmModal } from './UserStatusConfirmModal';
 import { formatRoleLabel, getRoleBadgeStyle, AVAILABLE_ROLES } from '../../utils/roleUtils';
 
 export const UserManagement: React.FC = () => {
-  const { isPrincipal, user: currentUser } = useAuth();
+  const { isPrincipal, isCeo, user: currentUser } = useAuth();
   const { showToast } = useToast();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -36,6 +37,7 @@ export const UserManagement: React.FC = () => {
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
   const [createRole, setCreateRole] = useState<UserRole>('cashier');
+  const [createGender, setCreateGender] = useState<'female' | 'male' | 'other'>('female');
   const [createError, setCreateError] = useState<string | null>(null);
 
   // Edit Staff Modal State
@@ -44,6 +46,7 @@ export const UserManagement: React.FC = () => {
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('staff');
+  const [editGender, setEditGender] = useState<'female' | 'male' | 'other'>('female');
   const [editStatus, setEditStatus] = useState<UserStatus>('active');
   const [editError, setEditError] = useState<string | null>(null);
   const [submittingEdit, setSubmittingEdit] = useState(false);
@@ -54,6 +57,7 @@ export const UserManagement: React.FC = () => {
 
   // Delete Staff Modal State
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
+  const [accessDeniedModalOpen, setAccessDeniedModalOpen] = useState(false);
 
   // Password Reset Modal State
   const [resetModalUserId, setResetModalUserId] = useState<string | null>(null);
@@ -79,12 +83,13 @@ export const UserManagement: React.FC = () => {
     }
 
     try {
-      const newStaff = await db.createStaffUser(createFullName, createEmail, createPassword || 'password123', createRole);
+      const newStaff = await db.createStaffUser(createFullName, createEmail, createPassword || 'password123', createRole, createGender);
       showToast('success', 'Account Created', `Created ${formatRoleLabel(newStaff.role)} account for ${newStaff.full_name} (${newStaff.email}).`);
       setCreateFullName('');
       setCreateEmail('');
       setCreatePassword('');
       setCreateRole('cashier');
+      setCreateGender('female');
       setIsCreateModalOpen(false);
       await loadUsers();
     } catch (err: any) {
@@ -98,6 +103,7 @@ export const UserManagement: React.FC = () => {
     setEditEmail(staff.email);
     setEditPassword(staff.password || '');
     setEditRole(staff.role || 'staff');
+    setEditGender((staff.gender as any) || 'female');
     setEditStatus(staff.status);
     setEditError(null);
   };
@@ -119,6 +125,7 @@ export const UserManagement: React.FC = () => {
         email: editEmail.trim(),
         password: editPassword.trim() || undefined,
         role: editRole,
+        gender: editGender,
         status: editStatus,
       });
 
@@ -130,6 +137,14 @@ export const UserManagement: React.FC = () => {
     } finally {
       setSubmittingEdit(false);
     }
+  };
+
+  const handleDeleteClick = (usr: UserProfile) => {
+    if (!isCeo) {
+      setAccessDeniedModalOpen(true);
+      return;
+    }
+    setDeleteTarget(usr);
   };
 
   const handleConfirmDelete = async () => {
@@ -278,6 +293,11 @@ export const UserManagement: React.FC = () => {
                             (YOU)
                           </span>
                         )}
+                        {usr.gender && (
+                          <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
+                            {usr.gender}
+                          </span>
+                        )}
                       </div>
                       <div className="text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1 mt-0.5">
                         <Mail className="w-3 h-3 text-slate-400" /> {usr.email}
@@ -343,7 +363,7 @@ export const UserManagement: React.FC = () => {
 
                           {/* Delete Account */}
                           <button
-                            onClick={() => setDeleteTarget(usr)}
+                            onClick={() => handleDeleteClick(usr)}
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors cursor-pointer"
                             title="Delete Account Permanently"
                           >
@@ -410,25 +430,40 @@ export const UserManagement: React.FC = () => {
                 />
               </div>
 
-              {/* Role Selection Dropdown */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                  <Briefcase className="w-3.5 h-3.5 text-emerald-600" /> Select User Role *
-                </label>
-                <select
-                  value={createRole}
-                  onChange={e => setCreateRole(e.target.value as UserRole)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold"
-                >
-                  {AVAILABLE_ROLES.map(r => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Full system authority is strictly for the CEO; other users operate with standard cashier access.
-                </p>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Role Selection Dropdown */}
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-emerald-600" /> User Role *
+                  </label>
+                  <select
+                    value={createRole}
+                    onChange={e => setCreateRole(e.target.value as UserRole)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold text-xs"
+                  >
+                    {AVAILABLE_ROLES.map(r => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Gender Dropdown */}
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Gender *
+                  </label>
+                  <select
+                    value={createGender}
+                    onChange={e => setCreateGender(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold text-xs"
+                  >
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -510,22 +545,40 @@ export const UserManagement: React.FC = () => {
                 />
               </div>
 
-              {/* Role Selection Dropdown */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                  <Briefcase className="w-3.5 h-3.5 text-indigo-600" /> Assigned System Role *
-                </label>
-                <select
-                  value={editRole}
-                  onChange={e => setEditRole(e.target.value as UserRole)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold"
-                >
-                  {AVAILABLE_ROLES.map(r => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Role Selection Dropdown */}
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-indigo-600" /> Assigned Role *
+                  </label>
+                  <select
+                    value={editRole}
+                    onChange={e => setEditRole(e.target.value as UserRole)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold text-xs"
+                  >
+                    {AVAILABLE_ROLES.map(r => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Gender Dropdown */}
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Gender *
+                  </label>
+                  <select
+                    value={editGender}
+                    onChange={e => setEditGender(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold text-xs"
+                  >
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -642,11 +695,48 @@ export const UserManagement: React.FC = () => {
         />
       )}
 
+      {/* ACCESS RESTRICTED POPUP MODAL (IF NON-CEO USER ATTEMPTS TO DELETE) */}
+      {accessDeniedModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-rose-200 dark:border-rose-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/50 pb-3">
+              <h3 className="text-base font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400" /> Permission Restricted
+              </h3>
+              <button 
+                onClick={() => setAccessDeniedModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs space-y-2">
+              <p className="font-extrabold text-sm text-rose-700 dark:text-rose-300">
+                CEO Super Admin Hi Delete Kar Sakta Hy
+              </p>
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                User account delete karny ka ikhtiyar sirf aur sirf CEO (Super Admin) k pass hy. Agar kisi user ka account delete karna hy to bara-e-meherbani CEO Super Admin se rabta karen.
+              </p>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setAccessDeniedModalOpen(false)}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+              >
+                Samajh Aa Gaya / Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* DELETE STAFF CONFIRMATION DIALOG MODAL */}
       {deleteTarget && (
         <DeleteConfirmModal
-          itemName={deleteTarget.full_name}
+          title="Delete User Account"
+          itemName={`${deleteTarget.full_name} (${formatRoleLabel(deleteTarget.role)})`}
           itemType="User Account"
+          message={`Are you sure you want to permanently delete the account of ${deleteTarget.full_name} (${deleteTarget.email})? This action cannot be undone.`}
           onConfirm={handleConfirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />

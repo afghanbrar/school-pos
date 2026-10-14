@@ -128,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
                     </span>
                   ) : item.roles.length === 1 && item.roles[0] === 'principal' ? (
                     <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
-                      CEO
+                      ADMIN
                     </span>
                   ) : null}
                 </button>
