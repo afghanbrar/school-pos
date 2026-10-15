@@ -384,256 +384,272 @@ export const UserManagement: React.FC = () => {
 
       {/* CREATE USER ACCOUNT MODAL WITH ROLE-SELECTION DROPDOWN */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-emerald-600" /> Create Authorized Account
               </h3>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {createError && (
-              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" /> {createError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateStaff} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ahmed Hassan"
-                  value={createFullName}
-                  onChange={e => setCreateFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Address (Login ID) *
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. user.name@haidermemorial.edu.pk"
-                  value={createEmail}
-                  onChange={e => setCreateEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Role Selection Dropdown */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                    <Briefcase className="w-3.5 h-3.5 text-emerald-600" /> User Role *
-                  </label>
-                  <select
-                    value={createRole}
-                    onChange={e => setCreateRole(e.target.value as UserRole)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold text-xs"
-                  >
-                    {AVAILABLE_ROLES.map(r => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+            {/* Scrollable Modal Body */}
+            <div className="p-6 pt-4 overflow-y-auto flex-1">
+              {createError && (
+                <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs rounded-xl flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" /> 
+                  <span>{createError}</span>
                 </div>
+              )}
 
-                {/* Gender Dropdown */}
+              <form onSubmit={handleCreateStaff} className="space-y-4 text-xs">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Gender *
+                    Full Name *
                   </label>
-                  <select
-                    value={createGender}
-                    onChange={e => setCreateGender(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold text-xs"
-                  >
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ahmed Hassan"
+                    value={createFullName}
+                    onChange={e => setCreateFullName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                  />
                 </div>
-              </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Initial Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Enter initial password (default: password123)"
-                  value={createPassword}
-                  onChange={e => setCreatePassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                />
-              </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Email Address (Login ID) *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. user.name@haidermemorial.edu.pk"
+                    value={createEmail}
+                    onChange={e => setCreateEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                  />
+                </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md cursor-pointer"
-                >
-                  Create Account
-                </button>
-              </div>
-            </form>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Role Selection Dropdown */}
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                      <Briefcase className="w-3.5 h-3.5 text-emerald-600" /> User Role *
+                    </label>
+                    <select
+                      value={createRole}
+                      onChange={e => setCreateRole(e.target.value as UserRole)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold text-xs"
+                    >
+                      {AVAILABLE_ROLES.map(r => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Gender Dropdown */}
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Gender *
+                    </label>
+                    <select
+                      value={createGender}
+                      onChange={e => setCreateGender(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white font-semibold text-xs"
+                    >
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Initial Password
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Enter initial password (default: password123)"
+                    value={createPassword}
+                    onChange={e => setCreatePassword(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                  />
+                </div>
+
+                <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800/80 sticky bottom-0 bg-white dark:bg-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-xl font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  >
+                    Create Account
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* EDIT USER ACCOUNT MODAL WITH ROLE-SELECTION DROPDOWN */}
       {editingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-indigo-600" /> Edit Account & Role Details
               </h3>
-              <button onClick={() => setEditingStaff(null)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                type="button"
+                onClick={() => setEditingStaff(null)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {editError && (
-              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" /> {editError}
-              </div>
-            )}
-
-            <form onSubmit={handleSaveEditStaff} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editFullName}
-                  onChange={e => setEditFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Address (Login ID) *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={editEmail}
-                  onChange={e => setEditEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Role Selection Dropdown */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                    <Briefcase className="w-3.5 h-3.5 text-indigo-600" /> Assigned Role *
-                  </label>
-                  <select
-                    value={editRole}
-                    onChange={e => setEditRole(e.target.value as UserRole)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold text-xs"
-                  >
-                    {AVAILABLE_ROLES.map(r => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+            <div className="p-6 pt-4 overflow-y-auto flex-1">
+              {editError && (
+                <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs rounded-xl flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" /> 
+                  <span>{editError}</span>
                 </div>
+              )}
 
-                {/* Gender Dropdown */}
+              <form onSubmit={handleSaveEditStaff} className="space-y-4 text-xs">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Gender *
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFullName}
+                    onChange={e => setEditFullName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Email Address (Login ID) *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editEmail}
+                    onChange={e => setEditEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Role Selection Dropdown */}
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                      <Briefcase className="w-3.5 h-3.5 text-indigo-600" /> Assigned Role *
+                    </label>
+                    <select
+                      value={editRole}
+                      onChange={e => setEditRole(e.target.value as UserRole)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold text-xs"
+                    >
+                      {AVAILABLE_ROLES.map(r => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Gender Dropdown */}
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Gender *
+                    </label>
+                    <select
+                      value={editGender}
+                      onChange={e => setEditGender(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold text-xs"
+                    >
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Password (Leave blank to keep unchanged)
+                  </label>
+                  <input
+                    type="text"
+                    value={editPassword}
+                    onChange={e => setEditPassword(e.target.value)}
+                    placeholder="Set or change password"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Account Status
                   </label>
                   <select
-                    value={editGender}
-                    onChange={e => setEditGender(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-semibold text-xs"
+                    value={editStatus}
+                    onChange={e => setEditStatus(e.target.value as UserStatus)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-bold"
                   >
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
-                    <option value="other">Other</option>
+                    <option value="active">Active (Can Log in & Issue Invoices)</option>
+                    <option value="inactive">Inactive (Blocked from System)</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Password (Leave blank to keep unchanged)
-                </label>
-                <input
-                  type="text"
-                  value={editPassword}
-                  onChange={e => setEditPassword(e.target.value)}
-                  placeholder="Set or change password"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Account Status
-                </label>
-                <select
-                  value={editStatus}
-                  onChange={e => setEditStatus(e.target.value as UserStatus)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white font-bold"
-                >
-                  <option value="active">Active (Can Log in & Issue Invoices)</option>
-                  <option value="inactive">Inactive (Blocked from System)</option>
-                </select>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingStaff(null)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingEdit}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  {submittingEdit ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+                <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800/80 sticky bottom-0 bg-white dark:bg-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStaff(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-xl font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingEdit}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg disabled:opacity-50 flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    {submittingEdit ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* QUICK RESET PASSWORD MODAL */}
       {resetModalUserId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 my-auto">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Key className="w-5 h-5 text-indigo-600" /> Quick Reset Password
