@@ -27,6 +27,9 @@ if (!sigFile) {
 const sigContent = fs.readFileSync(path.join(nsisDir, sigFile), 'utf-8').trim();
 const targetArtifact = sigFile.replace('.sig', '');
 
+// GitHub release assets automatically replace spaces with dots
+const githubAsset = targetArtifact.replace(/ /g, '.');
+
 const manifest = {
   version: version,
   notes: `School POS System Live Release v${version} - Instant Real-Time UI Performance & Live Updates`,
@@ -34,7 +37,7 @@ const manifest = {
   platforms: {
     'windows-x86_64': {
       signature: sigContent,
-      url: `https://github.com/afghanbrar/school-pos/releases/download/v${version}/${encodeURIComponent(targetArtifact)}`
+      url: `https://github.com/afghanbrar/school-pos/releases/download/v${version}/${githubAsset}`
     }
   }
 };
