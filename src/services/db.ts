@@ -32,16 +32,28 @@ const STORAGE_KEYS = {
   USERS: 'school_pos_users_v4',
   CATEGORIES: 'school_pos_categories_v4',
   PRODUCTS: 'school_pos_products_v4',
-  TRANSACTIONS: 'school_pos_transactions_v4',
+  TRANSACTIONS: 'school_pos_transactions_v5',
   SETTINGS: 'school_pos_settings_v4',
-  CUSTOMERS: 'school_pos_customers_v4',
+  CUSTOMERS: 'school_pos_customers_v5',
   CURRENT_USER: 'school_pos_current_user_v4',
-  EXPENSES: 'school_pos_expenses_v4',
-  HANDOVERS: 'school_pos_handovers_v4',
-  ACTIVITIES: 'school_pos_activities_v4',
-  INITIALIZED: 'school_pos_initialized_flag_v4',
+  EXPENSES: 'school_pos_expenses_v5',
+  HANDOVERS: 'school_pos_handovers_v5',
+  ACTIVITIES: 'school_pos_activities_v5',
+  INITIALIZED: 'school_pos_initialized_flag_v5',
   SUPABASE_URL: 'school_pos_supabase_url',
   SUPABASE_KEY: 'school_pos_supabase_key',
+};
+
+export const isDummyTransaction = (t: any): boolean => {
+  if (!t) return false;
+  const id = String(t.id || '');
+  const inv = String(t.invoice_number || '');
+  const buyer = String(t.buyer_name || '').toLowerCase();
+  
+  if (id.startsWith('tx-100') || id.startsWith('tx-101') || id === 'tx-1786472069407') return true;
+  if (inv.startsWith('INV-2026-100') || inv.startsWith('INV-2026-101')) return true;
+  if (buyer.includes('beaconhouse') || buyer.includes('muhammad ali') || buyer.includes('test goverment')) return true;
+  return false;
 };
 
 function getItem<T>(key: string, fallback: T): T {
@@ -128,10 +140,19 @@ class DatabaseService {
   private initLocalDefaults() {
     // Purge legacy storage versions
     try {
-      const keysToRemove: string[] = [];
+      const keysToRemove: string[] = [
+        'school_pos_transactions_v4',
+        'school_pos_transactions_v3',
+        'school_pos_transactions_v2',
+        'school_pos_transactions_v1',
+        'school_pos_expenses_v4',
+        'school_pos_handovers_v4',
+        'school_pos_activities_v4',
+        'school_pos_customers_v4',
+      ];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && (k.includes('_v1') || k.includes('_v2') || k.includes('_v3'))) {
+        if (k && (k.includes('_v1') || k.includes('_v2') || k.includes('_v3') || (k.includes('_v4') && (k.includes('trans') || k.includes('exp') || k.includes('hand') || k.includes('act') || k.includes('cust'))))) {
           keysToRemove.push(k);
         }
       }
@@ -308,12 +329,23 @@ class DatabaseService {
 
       // 4. Pull Transactions
       const { data: remoteTransactions, error: txErr } = await this.supabase.from('transactions').select('*');
-      if (!txErr && remoteTransactions && remoteTransactions.length > 0) {
+      if (!txErr && remoteTransactions) {
+        // If any dummy transactions exist remotely, wipe them clean from Supabase in the background
+        const dummyFound = remoteTransactions.filter(t => isDummyTransaction(t));
+        if (dummyFound.length > 0) {
+          this.runBackgroundSync(async () => {
+            await this.supabase!.from('transactions').delete().neq('id', '___none___');
+          });
+        }
+
+        const validTx = remoteTransactions.filter(t => !isDummyTransaction(t));
         const localTx = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
         const txMap = new Map<string, Transaction>();
-        localTx.forEach(t => txMap.set(t.id, t));
+        localTx.forEach(t => {
+          if (!isDummyTransaction(t)) txMap.set(t.id, t);
+        });
 
-        remoteTransactions.forEach(t => {
+        validTx.forEach(t => {
           const existing = txMap.get(t.id);
           txMap.set(t.id, {
             id: t.id,
@@ -413,9 +445,10 @@ class DatabaseService {
 
       // 4. Sync Transactions
       const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
-      if (transactions.length > 0) {
+      const validTx = transactions.filter(t => !isDummyTransaction(t));
+      if (validTx.length > 0) {
         const { error: txErr } = await this.supabase.from('transactions').upsert(
-          transactions.map(tx => ({
+          validTx.map(tx => ({
             id: tx.id,
             invoice_number: tx.invoice_number,
             buyer_type: tx.buyer_type,
@@ -1090,7 +1123,12 @@ class DatabaseService {
   /* ================= TRANSACTIONS (POS SALES) ================= */
 
   public async getTransactions(): Promise<Transaction[]> {
-    return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    const txs = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    const clean = txs.filter(t => !isDummyTransaction(t));
+    if (clean.length !== txs.length) {
+      setItem(STORAGE_KEYS.TRANSACTIONS, clean);
+    }
+    return clean;
   }
 
   public async createTransaction(txData: Omit<Transaction, 'id' | 'invoice_number' | 'created_at'>): Promise<Transaction> {

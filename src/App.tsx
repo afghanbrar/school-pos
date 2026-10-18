@@ -57,7 +57,7 @@ const MainAppContent: React.FC = () => {
     return (
       <>
         <LoginModal />
-        <UpdateNotificationModal currentVersion="1.0.6" />
+        <UpdateNotificationModal currentVersion="1.0.7" />
         <OfflineModal />
       </>
     );
@@ -102,7 +102,7 @@ const MainAppContent: React.FC = () => {
       )}
 
       <ToastContainer />
-      <UpdateNotificationModal currentVersion="1.0.6" />
+      <UpdateNotificationModal currentVersion="1.0.7" />
       <OfflineModal />
     </div>
   );

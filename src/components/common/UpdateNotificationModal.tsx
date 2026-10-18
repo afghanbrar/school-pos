@@ -17,7 +17,7 @@ interface UpdateNotificationModalProps {
   currentVersion?: string;
 }
 
-export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = ({ currentVersion = '1.0.6' }) => {
+export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = ({ currentVersion = '1.0.7' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
   const [updateStatus, setUpdateStatus] = useState<
