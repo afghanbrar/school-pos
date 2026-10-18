@@ -140,48 +140,42 @@ class DatabaseService {
       // ignore
     }
 
-    const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
+    // 1. Permanently wipe all sales transactions, receipts, expenses, and activity logs
+    setItem(STORAGE_KEYS.TRANSACTIONS, []);
+    setItem(STORAGE_KEYS.CUSTOMERS, []);
+    setItem(STORAGE_KEYS.EXPENSES, []);
+    setItem(STORAGE_KEYS.HANDOVERS, []);
+    setItem(STORAGE_KEYS.ACTIVITIES, []);
 
-    if (!isInitialized) {
-      // First time initialization: populate fresh defaults (CEO + Rubina Iftikhar as Principal, zero dummy data)
-      setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
-      setItem(STORAGE_KEYS.CATEGORIES, []);
-      setItem(STORAGE_KEYS.PRODUCTS, []);
-      setItem(STORAGE_KEYS.TRANSACTIONS, []);
-      setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
-      setItem(STORAGE_KEYS.CUSTOMERS, []);
-      setItem(STORAGE_KEYS.EXPENSES, []);
-      setItem(STORAGE_KEYS.HANDOVERS, []);
-      setItem(STORAGE_KEYS.ACTIVITIES, []);
-      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
-    } else {
-      // Ensure products, categories, transactions, expenses, handovers, activities are clean zero state
-      const existingProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-      if (existingProducts.some(p => p.id.startsWith('prod-10'))) {
-        setItem(STORAGE_KEYS.PRODUCTS, []);
-        setItem(STORAGE_KEYS.CATEGORIES, []);
-        setItem(STORAGE_KEYS.TRANSACTIONS, []);
-        setItem(STORAGE_KEYS.CUSTOMERS, []);
-        setItem(STORAGE_KEYS.EXPENSES, []);
-        setItem(STORAGE_KEYS.HANDOVERS, []);
-        setItem(STORAGE_KEYS.ACTIVITIES, []);
+    // 2. Keep ONLY categories created by the user (purge old default/template categories)
+    const defaultCatIds = new Set(['cat-01', 'cat-02', 'cat-03', 'cat-04', 'cat-05', 'cat-06', 'cat-07']);
+    let existingCategories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
+    existingCategories = existingCategories.filter(c => !defaultCatIds.has(c.id));
+    setItem(STORAGE_KEYS.CATEGORIES, existingCategories);
+
+    // 3. Keep user products (purge old demo products and remap legacy category references)
+    let existingProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    existingProducts = existingProducts.filter(p => !p.id.startsWith('prod-10'));
+    existingProducts = existingProducts.map(p => {
+      if (p.category_id === 'cat-04') {
+        return { ...p, category_id: 'cat-4840' };
       }
+      return p;
+    });
+    setItem(STORAGE_KEYS.PRODUCTS, existingProducts);
 
-      // Safeguard: ensure CEO account exists, remove demo/test accounts
-      let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, []);
-      users = users.filter(u => 
-        !u.email.toLowerCase().includes('demo') && 
-        !u.email.toLowerCase().includes('test') &&
-        u.email !== 'staff@haidermemorial.edu.pk'
-      );
+    // 4. Retain ONLY CEO and Rubina Iftikhar accounts; permanently remove all others
+    let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const allowedEmails = new Set(['ceo@haidermemorial.edu.pk', 'bina.iftikhar@gmail.com']);
+    users = users.filter(u => allowedEmails.has((u.email || '').toLowerCase().trim()));
 
-      const hasCeo = users.some(u => u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk');
-      if (!hasCeo) {
-        users.unshift(INITIAL_USERS[0]);
-      }
-
-      setItem(STORAGE_KEYS.USERS, users);
+    if (!users.some(u => (u.email || '').toLowerCase().trim() === 'ceo@haidermemorial.edu.pk')) {
+      users.unshift(INITIAL_USERS[0]);
     }
+    if (!users.some(u => (u.email || '').toLowerCase().trim() === 'bina.iftikhar@gmail.com')) {
+      users.push(INITIAL_USERS[1]);
+    }
+    setItem(STORAGE_KEYS.USERS, users);
 
     // Ensure settings title is updated to Haider Memorial School POS and Inventory System
     const currentSettings = getItem<SchoolSettings>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
@@ -189,6 +183,7 @@ class DatabaseService {
       currentSettings.name = 'Haider Memorial School POS and Inventory System';
       setItem(STORAGE_KEYS.SETTINGS, currentSettings);
     }
+    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
   }
 
   public initSupabaseClient() {
@@ -1702,30 +1697,20 @@ class DatabaseService {
     const currentUser = this.getCurrentUser();
     const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
     
-    // Preserve ONLY the active CEO / Super Admin account currently executing the wipe
-    const executingAccount: UserProfile = (currentUser && users.find(u => u.id === currentUser.id || u.email.toLowerCase() === currentUser.email.toLowerCase()))
-      || currentUser
-      || users.find(u => u.role === 'ceo' || u.email === 'ceo@haidermemorial.edu.pk')
-      || {
-        id: 'usr-ceo-01',
-        email: 'ceo@haidermemorial.edu.pk',
-        full_name: 'Chief Executive Officer (CEO)',
-        role: 'ceo' as const,
-        status: 'active' as const,
-        password: password === 'CeoMaster@2026' ? 'CeoMaster@2026' : password,
-        created_at: new Date().toISOString(),
-      };
+    // Preserve BOTH CEO account and Rubina Iftikhar
+    const ceoAccount: UserProfile = users.find(u => (u.email || '').toLowerCase().trim() === 'ceo@haidermemorial.edu.pk') || INITIAL_USERS[0];
+    const rubinaAccount: UserProfile = users.find(u => (u.email || '').toLowerCase().trim() === 'bina.iftikhar@gmail.com') || INITIAL_USERS[1];
 
-    // Keep active status and ceo role on the executing account
-    executingAccount.status = 'active';
-    executingAccount.role = 'ceo';
-    if (!executingAccount.password || executingAccount.password === 'password123') {
-      executingAccount.password = password;
+    if (password && password !== 'CeoMaster@2026') {
+      ceoAccount.password = password;
     }
 
-    // 1. Wipe all local data collections completely
-    setItem(STORAGE_KEYS.PRODUCTS, []);
-    setItem(STORAGE_KEYS.CATEGORIES, []);
+    const executingAccount = (currentUser && (currentUser.email || '').toLowerCase().trim() === 'bina.iftikhar@gmail.com')
+      ? rubinaAccount
+      : ceoAccount;
+
+    // 1. Wipe all transactions, receipts, customers, expenses, handovers
+    // BUT PRESERVE user products and user categories
     setItem(STORAGE_KEYS.TRANSACTIONS, []);
     setItem(STORAGE_KEYS.CUSTOMERS, []);
     setItem(STORAGE_KEYS.EXPENSES, []);
@@ -1738,14 +1723,14 @@ class DatabaseService {
         user_role: executingAccount.role,
         action: 'system_reset' as any,
         title: 'System Factory Reset Executed',
-        description: `Complete system & database wipe executed by ${executingAccount.full_name}. All products, categories, transactions, customers, expenses, handovers, and other user accounts deleted clean.`,
+        description: `Complete transaction & receipt wipe executed by ${executingAccount.full_name}. Products, categories, CEO, and Rubina Iftikhar accounts preserved.`,
         details: { reset_at: new Date().toISOString() },
         created_at: new Date().toISOString(),
       }
     ]);
     
-    // Preserve ONLY the executing CEO account in users list & keep active session logged in
-    setItem(STORAGE_KEYS.USERS, [executingAccount]);
+    // Retain BOTH CEO and Rubina Iftikhar in users list
+    setItem(STORAGE_KEYS.USERS, [ceoAccount, rubinaAccount]);
     setItem(STORAGE_KEYS.CURRENT_USER, executingAccount);
 
     // Keep settings clean
@@ -1761,11 +1746,9 @@ class DatabaseService {
     // 2. Wipe backend PostgreSQL database tables in Supabase (if connected)
     if (this.supabase) {
       const client = this.supabase;
-      const execId = executingAccount.id;
-      const execEmail = executingAccount.email.trim().toLowerCase();
 
       try {
-        // Sequential deletion respecting foreign key dependencies:
+        // Sequential deletion of receipts/transactions and logs:
         // Transactions
         const txRes = await client.from('transactions').delete().neq('id', '___none___');
         if (txRes.error) console.warn('Supabase transactions wipe error:', txRes.error.message);
@@ -1782,32 +1765,35 @@ class DatabaseService {
         const actRes = await client.from('activity_logs').delete().neq('id', '___none___');
         if (actRes.error) console.warn('Supabase activity_logs wipe error:', actRes.error.message);
 
-        // Products (must be deleted before categories due to FK)
-        const prodRes = await client.from('products').delete().neq('id', '___none___');
-        if (prodRes.error) console.warn('Supabase products wipe error:', prodRes.error.message);
+        // Note: Products and Categories are PRESERVED!
 
-        // Categories
-        const catRes = await client.from('categories').delete().neq('id', '___none___');
-        if (catRes.error) console.warn('Supabase categories wipe error:', catRes.error.message);
-
-        // Profiles: Delete all profiles EXCEPT the executing CEO account (matches both ID and Email)
+        // Profiles: Delete all profiles EXCEPT CEO and Rubina Iftikhar
         const profRes = await client
           .from('profiles')
           .delete()
-          .neq('id', execId)
-          .neq('email', execEmail);
-        if (profRes.error) console.warn('Supabase profiles wipe error:', profRes.error.message);
+          .neq('email', 'ceo@haidermemorial.edu.pk')
+          .neq('email', 'bina.iftikhar@gmail.com');
+        if (profRes.error) console.warn('Supabase profiles cleanup error:', profRes.error.message);
 
-        // Ensure the CEO account is preserved / upserted in Supabase profiles
-        const ceoUpsertRes = await client.from('profiles').upsert({
-          id: execId,
-          email: execEmail,
-          full_name: executingAccount.full_name,
-          role: 'principal', // DB schema constraint: CHECK (role IN ('principal', 'staff'))
-          status: 'active',
-          updated_at: new Date().toISOString(),
-        });
-        if (ceoUpsertRes.error) console.warn('Supabase CEO profile preserve error:', ceoUpsertRes.error.message);
+        // Ensure CEO and Rubina Iftikhar are upserted in Supabase profiles
+        await client.from('profiles').upsert([
+          {
+            id: ceoAccount.id,
+            email: 'ceo@haidermemorial.edu.pk',
+            full_name: ceoAccount.full_name,
+            role: 'principal',
+            status: 'active',
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: rubinaAccount.id,
+            email: 'bina.iftikhar@gmail.com',
+            full_name: rubinaAccount.full_name,
+            role: 'principal',
+            status: 'active',
+            updated_at: new Date().toISOString(),
+          }
+        ]);
 
       } catch (e: any) {
         console.warn('Supabase cloud factory reset notice:', e?.message || e);
@@ -1815,7 +1801,7 @@ class DatabaseService {
     }
 
     this.notify('all');
-    return { success: true, message: 'System factory reset successful. All database records and accounts wiped clean. CEO super admin account retained.' };
+    return { success: true, message: 'System reset successful. All transaction receipts and logs permanently wiped. User categories, products, CEO and Rubina Iftikhar accounts preserved.' };
   }
 }
 
