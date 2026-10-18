@@ -1,0 +1,11 @@
+{
+  "version": "1.0.5",
+  "notes": "School POS System Live Release v1.0.5 - Instant Real-Time UI Performance & Live Updates",
+  "pub_date": "2026-10-18T06:30:13.062Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRN0J1VDhSS3I2V3hZQVRKZ3V5RmdHRXYyMGhYRDVVbXhhWFZwRk52b285UXV3ZjAwN1E5K3VDVXpuNDkveTNLSHNlNkk4WHlkYVpONTFaV1RlY3V6QmhaeE9EZUNBNWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzA1MDEyCWZpbGU6U2Nob29sIFBPUyBTeXN0ZW1fMS4wLjVfeDY0LXNldHVwLm5zaXMuemlwCkVxeGpOMWlTWk9aSUdidlB5T3JFWjJwd05lN2d2c2d0R2ZvUkFTaitjTXZ6cXdzNHd6ZVgvMlV5ZmxFWXNLNVphWFF4MldPelpDVngzdmNFQ3QybENRPT0K",
+      "url": "https://github.com/afghanbrar/school-pos/releases/download/v1.0.5/School%20POS%20System_1.0.5_x64-setup.nsis.zip"
+    }
+  }
+}

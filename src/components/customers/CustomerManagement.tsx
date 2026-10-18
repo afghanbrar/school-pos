@@ -65,6 +65,12 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ settings
 
   useEffect(() => {
     loadData();
+    const unsub = db.subscribe(category => {
+      if (category === 'customers' || category === 'transactions' || category === 'all') {
+        loadData();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadData = async () => {

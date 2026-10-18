@@ -72,6 +72,12 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
 
   useEffect(() => {
     loadData();
+    const unsub = db.subscribe(category => {
+      if (category === 'products' || category === 'categories' || category === 'all') {
+        loadData();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -247,8 +253,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
 
       const created = await db.createTransaction(transactionData);
       setCompletedTx(created);
-      
-      await loadData();
+      showToast('success', 'Sale Completed', `Processed ${created.invoice_number} for ${created.buyer_name}.`);
       
       setCart([]);
       setStudentName('');
@@ -258,6 +263,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
       setNotes('');
       setDiscount(0);
       setReceivedAmount('');
+      await loadData();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to process transaction.');
     } finally {

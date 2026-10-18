@@ -1,7 +1,7 @@
 {
   "name": "school-pos",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build": "tauri build",
+    "tauri:build": "node scripts/build-tauri.js",
     "tauri:dev": "tauri dev",
     "generate-manifest": "node scripts/generate-manifest.js"
   },

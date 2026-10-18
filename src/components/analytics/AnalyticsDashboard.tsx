@@ -42,6 +42,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ settings
 
   useEffect(() => {
     loadAnalyticsData();
+    const unsub = db.subscribe(category => {
+      if (category === 'transactions' || category === 'expenses' || category === 'users' || category === 'all') {
+        loadAnalyticsData();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadAnalyticsData = async () => {

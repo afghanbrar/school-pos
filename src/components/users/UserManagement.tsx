@@ -66,6 +66,12 @@ export const UserManagement: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
+    const unsub = db.subscribe(category => {
+      if (category === 'users' || category === 'all') {
+        loadUsers();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadUsers = async () => {
@@ -82,18 +88,27 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
+    const name = createFullName.trim();
+    const email = createEmail.trim();
+    const pwd = createPassword.trim() || 'password123';
+    const role = createRole;
+    const gender = createGender;
+
+    setCreateFullName('');
+    setCreateEmail('');
+    setCreatePassword('');
+    setCreateRole('cashier');
+    setCreateGender('female');
+    setIsCreateModalOpen(false);
+
     try {
-      const newStaff = await db.createStaffUser(createFullName, createEmail, createPassword || 'password123', createRole, createGender);
+      const newStaff = await db.createStaffUser(name, email, pwd, role, gender);
+      setUsers(prev => [newStaff, ...prev]);
       showToast('success', 'Account Created', `Created ${formatRoleLabel(newStaff.role)} account for ${newStaff.full_name} (${newStaff.email}).`);
-      setCreateFullName('');
-      setCreateEmail('');
-      setCreatePassword('');
-      setCreateRole('cashier');
-      setCreateGender('female');
-      setIsCreateModalOpen(false);
       await loadUsers();
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create account.');
+      await loadUsers();
     }
   };
 
@@ -118,22 +133,26 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
+    const targetStaff = editingStaff;
+    const editPayload = {
+      full_name: editFullName.trim(),
+      email: editEmail.trim(),
+      password: editPassword.trim() || undefined,
+      role: editRole,
+      gender: editGender,
+      status: editStatus,
+    };
+
+    setEditingStaff(null);
     setSubmittingEdit(true);
     try {
-      await db.updateStaffUser(editingStaff.id, {
-        full_name: editFullName.trim(),
-        email: editEmail.trim(),
-        password: editPassword.trim() || undefined,
-        role: editRole,
-        gender: editGender,
-        status: editStatus,
-      });
-
-      showToast('success', 'User Updated', `Updated profile and credentials for ${editFullName.trim()}.`);
-      setEditingStaff(null);
+      const updated = await db.updateStaffUser(targetStaff.id, editPayload);
+      setUsers(prev => prev.map(u => u.id === targetStaff.id ? updated : u));
+      showToast('success', 'User Updated', `Updated profile and credentials for ${editPayload.full_name}.`);
       await loadUsers();
     } catch (err: any) {
       setEditError(err.message || 'Failed to update account.');
+      await loadUsers();
     } finally {
       setSubmittingEdit(false);
     }
@@ -149,13 +168,16 @@ export const UserManagement: React.FC = () => {
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    setUsers(prev => prev.filter(u => u.id !== target.id));
     try {
-      await db.deleteStaffUser(deleteTarget.id);
-      showToast('delete', 'User Deleted', `Account ${deleteTarget.full_name} has been removed.`);
-      setDeleteTarget(null);
+      await db.deleteStaffUser(target.id);
+      showToast('delete', 'User Deleted', `Account ${target.full_name} has been removed.`);
       await loadUsers();
     } catch (err: any) {
       alert(err.message || 'Failed to delete account.');
+      await loadUsers();
     }
   };
 

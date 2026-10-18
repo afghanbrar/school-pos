@@ -26,6 +26,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ settings
 
   useEffect(() => {
     loadTxHistory();
+    const unsub = db.subscribe(category => {
+      if (category === 'transactions' || category === 'all') {
+        loadTxHistory();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadTxHistory = async () => {

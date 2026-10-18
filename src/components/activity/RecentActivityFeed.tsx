@@ -39,6 +39,12 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
 
   useEffect(() => {
     loadActivities();
+    const unsub = db.subscribe(category => {
+      if (category === 'activities' || category === 'users' || category === 'all') {
+        loadActivities();
+      }
+    });
+    return () => unsub();
   }, [user, isPrincipal]);
 
   const loadActivities = async () => {

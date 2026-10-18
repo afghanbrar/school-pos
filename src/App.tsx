@@ -17,6 +17,7 @@ import { RecentActivityFeed } from './components/activity/RecentActivityFeed';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ProfileModal } from './components/profile/ProfileModal';
 import { OfflineModal } from './components/common/OfflineModal';
+import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import type { SchoolSettings } from './types';
 import { db } from './services/db';
@@ -56,6 +57,7 @@ const MainAppContent: React.FC = () => {
     return (
       <>
         <LoginModal />
+        <UpdateNotificationModal currentVersion="1.0.5" />
         <OfflineModal />
       </>
     );
@@ -100,6 +102,7 @@ const MainAppContent: React.FC = () => {
       )}
 
       <ToastContainer />
+      <UpdateNotificationModal currentVersion="1.0.5" />
       <OfflineModal />
     </div>
   );

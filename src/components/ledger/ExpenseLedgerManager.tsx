@@ -79,6 +79,12 @@ export const ExpenseLedgerManager: React.FC<ExpenseLedgerManagerProps> = ({ sett
 
   useEffect(() => {
     loadLedgerData();
+    const unsub = db.subscribe(category => {
+      if (category === 'expenses' || category === 'handovers' || category === 'transactions' || category === 'users' || category === 'all') {
+        loadLedgerData();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadLedgerData = async () => {

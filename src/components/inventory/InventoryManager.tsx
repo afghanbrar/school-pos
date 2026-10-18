@@ -75,6 +75,12 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
 
   useEffect(() => {
     loadInventory();
+    const unsub = db.subscribe(category => {
+      if (category === 'products' || category === 'categories' || category === 'all') {
+        loadInventory();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadInventory = async () => {
@@ -94,16 +100,21 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
       setCatError('Category name is required.');
       return;
     }
+    const targetName = newCatName.trim();
+    const targetDesc = newCatDesc.trim();
+    setNewCatName('');
+    setNewCatDesc('');
+    setIsCategoryModalOpen(false);
+
     try {
-      await db.createCategory(newCatName, newCatDesc);
-      showToast('success', 'Category Created', `Created category "${newCatName.trim()}".`);
-      setNewCatName('');
-      setNewCatDesc('');
-      setIsCategoryModalOpen(false);
+      const createdCat = await db.createCategory(targetName, targetDesc);
+      setCategories(prev => [createdCat, ...prev]);
+      showToast('success', 'Category Created', `Created category "${createdCat.name}".`);
       await loadInventory();
     } catch (err: any) {
       setCatError(err.message || 'Failed to create category.');
       showToast('error', 'Category Failed', err.message || 'Failed to create category.');
+      await loadInventory();
     }
   };
 
@@ -173,19 +184,23 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
         purchased_by: purchasedBy.trim() || (isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff')),
       };
 
+      setIsProductModalOpen(false);
+
       if (editingProductId) {
-        await db.updateProduct(editingProductId, productPayload);
+        const updated = await db.updateProduct(editingProductId, productPayload);
+        setProducts(prev => prev.map(p => p.id === editingProductId ? updated : p));
         showToast('success', 'Product Updated', `Updated product "${productPayload.name}".`);
       } else {
-        await db.addProduct(productPayload);
+        const created = await db.addProduct(productPayload);
+        setProducts(prev => [created, ...prev]);
         showToast('success', 'Product Stored', `Stored "${productPayload.name}" from ${productPayload.wholesaler_name || 'Wholesaler'}.`);
       }
 
-      setIsProductModalOpen(false);
       await loadInventory();
     } catch (err: any) {
       setProdError(err.message || 'Failed to save product.');
       showToast('error', 'Product Error', err.message || 'Failed to save product.');
+      await loadInventory();
     }
   };
 
@@ -200,17 +215,21 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
-    if (deleteTarget.type === 'Product') {
-      await db.deleteProduct(deleteTarget.id);
-      showToast('delete', 'Product Deleted', `Removed product "${deleteTarget.name}".`);
-    } else if (deleteTarget.type === 'Category') {
-      await db.deleteCategory(deleteTarget.id);
-      showToast('delete', 'Category Deleted', `Removed category "${deleteTarget.name}".`);
-      if (selectedCategory === deleteTarget.id) {
+    const target = deleteTarget;
+    setDeleteTarget(null);
+
+    if (target.type === 'Product') {
+      setProducts(prev => prev.filter(p => p.id !== target.id));
+      await db.deleteProduct(target.id);
+      showToast('delete', 'Product Deleted', `Removed product "${target.name}".`);
+    } else if (target.type === 'Category') {
+      setCategories(prev => prev.filter(c => c.id !== target.id));
+      await db.deleteCategory(target.id);
+      showToast('delete', 'Category Deleted', `Removed category "${target.name}".`);
+      if (selectedCategory === target.id) {
         setSelectedCategory('all');
       }
     }
-    setDeleteTarget(null);
     await loadInventory();
   };
 

@@ -61,14 +61,67 @@ function setItem<T>(key: string, value: T): void {
   }
 }
 
+export type DataCategory = 
+  | 'products' 
+  | 'categories' 
+  | 'transactions' 
+  | 'users' 
+  | 'customers' 
+  | 'expenses' 
+  | 'handovers' 
+  | 'activities' 
+  | 'settings' 
+  | 'all';
+
+type DataListener = (category: DataCategory) => void;
+
 class DatabaseService {
   private supabase: SupabaseClient | null = null;
+  private listeners: Set<DataListener> = new Set();
 
   constructor() {
     this.initLocalDefaults();
     this.initSupabaseClient();
     this.syncSupabaseToLocal().finally(() => {
       this.syncLocalToSupabase();
+    });
+  }
+
+  /**
+   * Subscribe to instantaneous local and cloud data changes
+   */
+  public subscribe(listener: DataListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Instantly notify all subscribers across the entire application UI
+   */
+  public notify(category: DataCategory = 'all'): void {
+    this.listeners.forEach(fn => {
+      try {
+        fn(category);
+      } catch (e) {
+        console.error('Data listener error:', e);
+      }
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('school_pos_data_change', { detail: { category } }));
+    }
+  }
+
+  /**
+   * Non-blocking background sync runner to ensure 0ms UI latency
+   */
+  private runBackgroundSync(task: () => Promise<any>): void {
+    Promise.resolve().then(() => {
+      task().catch(err => {
+        console.warn('Background Supabase cloud sync notice:', err);
+      });
     });
   }
 
@@ -289,6 +342,7 @@ class DatabaseService {
         setItem(STORAGE_KEYS.TRANSACTIONS, Array.from(txMap.values()));
       }
 
+      this.notify('all');
       return { success: true, message: 'Cloud database synchronized with local system.' };
     } catch (e: any) {
       console.warn('Supabase to local pull notice:', e);
@@ -598,12 +652,7 @@ class DatabaseService {
   }
 
   public async getUsers(): Promise<UserProfile[]> {
-    let users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-    if (users.length <= 1 && this.supabase) {
-      await this.syncSupabaseToLocal();
-      users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-    }
-    return users;
+    return getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
   }
 
   public async updateUserProfile(
@@ -637,20 +686,19 @@ class DatabaseService {
     if (current && current.id === userId) {
       setItem(STORAGE_KEYS.CURRENT_USER, users[index]);
     }
+    this.notify('users');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('profiles').update({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').update({
           email: users[index].email,
           full_name: users[index].full_name,
           updated_at: new Date().toISOString(),
         }).eq('id', userId);
-      } catch (e) {
-        console.warn('Supabase profile update sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'profile_updated',
       'Profile Credentials Updated',
       `User ${users[index].full_name} updated account credentials`,
@@ -682,10 +730,11 @@ class DatabaseService {
 
     users.unshift(newUser);
     setItem(STORAGE_KEYS.USERS, users);
+    this.notify('users');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('profiles').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').upsert({
           id: newUser.id,
           email: newUser.email,
           full_name: newUser.full_name,
@@ -693,12 +742,10 @@ class DatabaseService {
           status: newUser.status,
           created_at: newUser.created_at,
         });
-      } catch (e) {
-        console.warn('Supabase staff creation sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'staff_created',
       'New User Account Created',
       `Created ${role.toUpperCase()} account for ${newUser.full_name} (${newUser.email})`,
@@ -746,23 +793,22 @@ class DatabaseService {
     }
 
     setItem(STORAGE_KEYS.USERS, users);
+    this.notify('users');
 
-    // Sync to Supabase
+    // Sync to Supabase in background
     if (this.supabase) {
-      try {
-        await this.supabase.from('profiles').update({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').update({
           email: users[index].email,
           full_name: users[index].full_name,
           role: (users[index].role === 'ceo' ? 'principal' : (users[index].role || 'staff')),
           status: users[index].status,
           updated_at: new Date().toISOString(),
         }).eq('id', userId);
-      } catch (e) {
-        console.warn('Supabase staff update sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'profile_updated',
       'Staff Account Details Updated',
       `Updated profile for ${users[index].full_name} (${users[index].email})`,
@@ -783,8 +829,18 @@ class DatabaseService {
 
     users[index].status = status;
     setItem(STORAGE_KEYS.USERS, users);
+    this.notify('users');
 
-    await this.logActivity(
+    if (this.supabase) {
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').update({
+          status: status,
+          updated_at: new Date().toISOString(),
+        }).eq('id', userId);
+      });
+    }
+
+    void this.logActivity(
       'user_status_changed',
       'Staff Status Changed',
       `Changed status of ${users[index].full_name} to ${status.toUpperCase()}`,
@@ -800,8 +856,9 @@ class DatabaseService {
     if (!user) throw new Error('User not found.');
     user.password = newPassword || 'password123';
     setItem(STORAGE_KEYS.USERS, users);
+    this.notify('users');
 
-    await this.logActivity(
+    void this.logActivity(
       'profile_updated',
       'Staff Password Reset',
       `Reset password for staff member ${user.full_name} (${user.email})`,
@@ -830,16 +887,15 @@ class DatabaseService {
 
     const filtered = users.filter(u => u.id !== userId);
     setItem(STORAGE_KEYS.USERS, filtered);
+    this.notify('users');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('profiles').delete().eq('id', userId);
-      } catch (e) {
-        console.warn('Supabase user delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').delete().eq('id', userId);
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'user_status_changed',
       'User Account Deleted',
       `Deleted account ${userToDelete.full_name} (${userToDelete.email}) from the system`,
@@ -850,12 +906,7 @@ class DatabaseService {
   /* ================= CATEGORIES & PRODUCTS (INVENTORY) ================= */
 
   public async getCategories(): Promise<Category[]> {
-    let cats = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-    if ((!cats || cats.length === 0) && this.supabase) {
-      await this.syncSupabaseToLocal();
-      cats = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-    }
-    return cats;
+    return getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
   }
 
   public async createCategory(name: string, description?: string, icon_name?: string): Promise<Category> {
@@ -876,22 +927,21 @@ class DatabaseService {
 
     categories.unshift(newCategory);
     setItem(STORAGE_KEYS.CATEGORIES, categories);
+    this.notify('categories');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('categories').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('categories').upsert({
           id: newCategory.id,
           name: newCategory.name,
           description: newCategory.description || null,
           icon_name: newCategory.icon_name || 'Tag',
           created_at: newCategory.created_at,
         });
-      } catch (e) {
-        console.warn('Supabase category create sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'category_created',
       'Inventory Category Created',
       `Created category "${newCategory.name}"`,
@@ -910,23 +960,18 @@ class DatabaseService {
     const defaultCat = filtered[0]?.id || '';
     const updatedProducts = products.map(p => p.category_id === id ? { ...p, category_id: defaultCat } : p);
     setItem(STORAGE_KEYS.PRODUCTS, updatedProducts);
+    this.notify('categories');
+    this.notify('products');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('categories').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase category delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('categories').delete().eq('id', id);
+      });
     }
   }
 
   public async getProducts(): Promise<Product[]> {
-    let prods = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    if ((!prods || prods.length === 0) && this.supabase) {
-      await this.syncSupabaseToLocal();
-      prods = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    }
-    return prods;
+    return getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
   }
 
   public async addProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
@@ -941,10 +986,11 @@ class DatabaseService {
 
     products.unshift(newProduct);
     setItem(STORAGE_KEYS.PRODUCTS, products);
+    this.notify('products');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('products').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('products').upsert({
           id: newProduct.id,
           sku: newProduct.sku,
           name: newProduct.name,
@@ -962,12 +1008,10 @@ class DatabaseService {
           created_at: newProduct.created_at,
           updated_at: newProduct.updated_at,
         });
-      } catch (e) {
-        console.warn('Supabase product add sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'product_added',
       'Inventory Stock Added',
       `Added product "${newProduct.name}" (SKU: ${newProduct.sku}) • Wholesaler: ${newProduct.wholesaler_name || 'N/A'} • Qty: ${newProduct.quantity}`,
@@ -990,10 +1034,11 @@ class DatabaseService {
 
     products[index] = updated;
     setItem(STORAGE_KEYS.PRODUCTS, products);
+    this.notify('products');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('products').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('products').upsert({
           id: updated.id,
           sku: updated.sku,
           name: updated.name,
@@ -1011,12 +1056,10 @@ class DatabaseService {
           created_at: updated.created_at,
           updated_at: updated.updated_at,
         });
-      } catch (e) {
-        console.warn('Supabase product update sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'product_updated',
       'Product Stock/Details Updated',
       `Updated product "${updated.name}" (SKU: ${updated.sku}) • Stock: ${updated.quantity}`,
@@ -1031,17 +1074,16 @@ class DatabaseService {
     const prod = products.find(p => p.id === id);
     const filtered = products.filter(p => p.id !== id);
     setItem(STORAGE_KEYS.PRODUCTS, filtered);
+    this.notify('products');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('products').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase product delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('products').delete().eq('id', id);
+      });
     }
 
     if (prod) {
-      await this.logActivity(
+      void this.logActivity(
         'product_deleted',
         'Product Removed from Inventory',
         `Deleted product "${prod.name}" (SKU: ${prod.sku})`,
@@ -1053,12 +1095,7 @@ class DatabaseService {
   /* ================= TRANSACTIONS (POS SALES) ================= */
 
   public async getTransactions(): Promise<Transaction[]> {
-    let txs = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
-    if ((!txs || txs.length === 0) && this.supabase) {
-      await this.syncSupabaseToLocal();
-      txs = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
-    }
-    return txs;
+    return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
   }
 
   public async createTransaction(txData: Omit<Transaction, 'id' | 'invoice_number' | 'created_at'>): Promise<Transaction> {
@@ -1084,10 +1121,12 @@ class DatabaseService {
 
     transactions.unshift(newTx);
     setItem(STORAGE_KEYS.TRANSACTIONS, transactions);
+    this.notify('transactions');
+    this.notify('products');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('transactions').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('transactions').upsert({
           id: newTx.id,
           invoice_number: newTx.invoice_number,
           buyer_type: newTx.buyer_type,
@@ -1104,12 +1143,21 @@ class DatabaseService {
           notes: newTx.notes || null,
           created_at: newTx.created_at,
         });
-      } catch (e) {
-        console.warn('Supabase transaction add sync notice:', e);
-      }
+
+        // Also sync updated product quantities in background
+        for (const item of txData.items) {
+          const updatedProd = products.find(p => p.id === item.product_id);
+          if (updatedProd) {
+            await this.supabase!.from('products').update({
+              quantity: updatedProd.quantity,
+              updated_at: updatedProd.updated_at,
+            }).eq('id', updatedProd.id);
+          }
+        }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'sale_created',
       'New POS Sale Invoice Created',
       `Processed ${newTx.invoice_number} for ${newTx.buyer_name} • Paid: PKR ${newTx.paid_amount.toLocaleString()} (${newTx.payment_method.toUpperCase()})`,
@@ -1131,17 +1179,16 @@ class DatabaseService {
     const tx = transactions.find(t => t.id === id);
     const filtered = transactions.filter(t => t.id !== id);
     setItem(STORAGE_KEYS.TRANSACTIONS, filtered);
+    this.notify('transactions');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('transactions').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase transaction delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('transactions').delete().eq('id', id);
+      });
     }
 
     if (tx) {
-      await this.logActivity(
+      void this.logActivity(
         'sale_created',
         'Transaction Record Deleted',
         `Deleted sales invoice #${tx.invoice_number} for ${tx.buyer_name} (Amount: PKR ${tx.total_amount.toLocaleString()})`,
@@ -1166,10 +1213,11 @@ class DatabaseService {
 
     expenses.unshift(newExpense);
     setItem(STORAGE_KEYS.EXPENSES, expenses);
+    this.notify('expenses');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('expenses').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('expenses').upsert({
           id: newExpense.id,
           staff_id: newExpense.staff_id,
           staff_name: newExpense.staff_name,
@@ -1181,12 +1229,10 @@ class DatabaseService {
           description: newExpense.description || null,
           created_at: newExpense.created_at,
         });
-      } catch (e) {
-        console.warn('Supabase expense sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'expense_logged',
       'School Expense Deducted',
       `Logged expense "${newExpense.title}" (PKR ${newExpense.amount.toLocaleString()}) by ${newExpense.staff_name} • Deducted from sales revenue`,
@@ -1207,17 +1253,16 @@ class DatabaseService {
     const exp = expenses.find(e => e.id === id);
     const filtered = expenses.filter(e => e.id !== id);
     setItem(STORAGE_KEYS.EXPENSES, filtered);
+    this.notify('expenses');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('expenses').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase expense delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('expenses').delete().eq('id', id);
+      });
     }
 
     if (exp) {
-      await this.logActivity(
+      void this.logActivity(
         'expense_deleted',
         'Expense Record Removed',
         `Deleted expense "${exp.title}" (PKR ${exp.amount.toLocaleString()})`,
@@ -1250,10 +1295,11 @@ class DatabaseService {
 
     handovers.unshift(newHandover);
     setItem(STORAGE_KEYS.HANDOVERS, handovers);
+    this.notify('handovers');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('cash_handovers').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('cash_handovers').upsert({
           id: newHandover.id,
           handover_code: newHandover.handover_code,
           staff_id: newHandover.staff_id,
@@ -1271,12 +1317,10 @@ class DatabaseService {
           status: newHandover.status,
           submitted_at: newHandover.submitted_at,
         });
-      } catch (e) {
-        console.warn('Supabase cash handover submit sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'handover_submitted',
       'Cash Handover Submitted to CEO',
       `${newHandover.staff_name} submitted balance handover ${newHandover.handover_code} with Net Cash of PKR ${newHandover.net_cash_submitted.toLocaleString()} for CEO approval`,
@@ -1306,21 +1350,20 @@ class DatabaseService {
 
     handovers[index] = updated;
     setItem(STORAGE_KEYS.HANDOVERS, handovers);
+    this.notify('handovers');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('cash_handovers').update({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('cash_handovers').update({
           status: 'approved',
           acknowledged_by: updated.acknowledged_by,
           acknowledged_at: updated.acknowledged_at,
           ceo_notes: updated.ceo_notes,
         }).eq('id', id);
-      } catch (e) {
-        console.warn('Supabase cash handover approve sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'handover_approved',
       'Cash Handover Approved by CEO',
       `CEO approved & acknowledged cash handover ${updated.handover_code} from ${updated.staff_name} (PKR ${updated.net_cash_submitted.toLocaleString()}) • Immutable Record Created`,
@@ -1351,21 +1394,20 @@ class DatabaseService {
 
     handovers[index] = updated;
     setItem(STORAGE_KEYS.HANDOVERS, handovers);
+    this.notify('handovers');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('cash_handovers').update({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('cash_handovers').update({
           status: 'rejected',
           acknowledged_by: updated.acknowledged_by,
           acknowledged_at: updated.acknowledged_at,
           rejection_reason: updated.rejection_reason,
         }).eq('id', id);
-      } catch (e) {
-        console.warn('Supabase cash handover reject sync notice:', e);
-      }
+      });
     }
 
-    await this.logActivity(
+    void this.logActivity(
       'handover_rejected',
       'Cash Handover Rejected / Returned by CEO',
       `CEO rejected cash handover ${updated.handover_code} from ${updated.staff_name}. Reason: ${updated.rejection_reason}`,
@@ -1384,17 +1426,16 @@ class DatabaseService {
     const hnd = handovers.find(h => h.id === id);
     const filtered = handovers.filter(h => h.id !== id);
     setItem(STORAGE_KEYS.HANDOVERS, filtered);
+    this.notify('handovers');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('cash_handovers').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase cash handover delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('cash_handovers').delete().eq('id', id);
+      });
     }
 
     if (hnd) {
-      await this.logActivity(
+      void this.logActivity(
         'handover_rejected',
         'Handover Record Deleted',
         `Deleted cash handover record ${hnd.handover_code} from ${hnd.staff_name}`,
@@ -1443,10 +1484,11 @@ class DatabaseService {
       activities.pop();
     }
     setItem(STORAGE_KEYS.ACTIVITIES, activities);
+    this.notify('activities');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('activity_logs').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('activity_logs').upsert({
           id: newLog.id,
           user_id: newLog.user_id,
           user_name: newLog.user_name,
@@ -1457,9 +1499,7 @@ class DatabaseService {
           details: newLog.details || null,
           created_at: newLog.created_at,
         });
-      } catch (e) {
-        console.warn('Supabase activity log sync notice:', e);
-      }
+      });
     }
 
     return newLog;
@@ -1469,25 +1509,23 @@ class DatabaseService {
     const activities = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, []);
     const filtered = activities.filter(a => a.id !== id);
     setItem(STORAGE_KEYS.ACTIVITIES, filtered);
+    this.notify('activities');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('activity_logs').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase activity log delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('activity_logs').delete().eq('id', id);
+      });
     }
   }
 
   public async clearAllActivityLogs(): Promise<void> {
     setItem(STORAGE_KEYS.ACTIVITIES, []);
+    this.notify('activities');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('activity_logs').delete().neq('id', '0');
-      } catch (e) {
-        console.warn('Supabase activity logs clear sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('activity_logs').delete().neq('id', '0');
+      });
     }
   }
 
@@ -1504,7 +1542,8 @@ class DatabaseService {
 
   public async updateSettings(settings: SchoolSettings): Promise<SchoolSettings> {
     setItem(STORAGE_KEYS.SETTINGS, settings);
-    await this.logActivity(
+    this.notify('settings');
+    void this.logActivity(
       'profile_updated',
       'School Settings Updated',
       `Updated school branding and general settings for ${settings.name}`,
@@ -1528,10 +1567,11 @@ class DatabaseService {
 
     customers.unshift(newCustomer);
     setItem(STORAGE_KEYS.CUSTOMERS, customers);
+    this.notify('customers');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('profiles').upsert({
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').upsert({
           id: newCustomer.id,
           full_name: newCustomer.full_name,
           email: newCustomer.email || `${newCustomer.id}@school.pos`,
@@ -1539,9 +1579,7 @@ class DatabaseService {
           status: 'active',
           created_at: newCustomer.created_at,
         });
-      } catch (e) {
-        console.warn('Supabase customer create sync notice:', e);
-      }
+      });
     }
 
     return newCustomer;
@@ -1559,6 +1597,7 @@ class DatabaseService {
 
     customers[index] = updated;
     setItem(STORAGE_KEYS.CUSTOMERS, customers);
+    this.notify('customers');
     return updated;
   }
 
@@ -1566,13 +1605,12 @@ class DatabaseService {
     const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
     const filtered = customers.filter(c => c.id !== id);
     setItem(STORAGE_KEYS.CUSTOMERS, filtered);
+    this.notify('customers');
 
     if (this.supabase) {
-      try {
-        await this.supabase.from('profiles').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase customer delete sync notice:', e);
-      }
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('profiles').delete().eq('id', id);
+      });
     }
   }
 
@@ -1611,8 +1649,8 @@ class DatabaseService {
       totalSettled += settledForTx;
 
       if (this.supabase) {
-        try {
-          await this.supabase.from('transactions').upsert({
+        this.runBackgroundSync(async () => {
+          await this.supabase!.from('transactions').upsert({
             id: tx.id,
             invoice_number: tx.invoice_number,
             buyer_type: tx.buyer_type,
@@ -1622,15 +1660,15 @@ class DatabaseService {
             pending_amount: tx.pending_amount,
             payment_method: paymentMethod,
           });
-        } catch (e) {
-          console.warn('Supabase dues payment tx update sync notice:', e);
-        }
+        });
       }
     }
 
     setItem(STORAGE_KEYS.TRANSACTIONS, transactions);
+    this.notify('transactions');
+    this.notify('customers');
 
-    await this.logActivity(
+    void this.logActivity(
       'sale_created',
       'Customer Dues Settled',
       `Collected PKR ${totalSettled.toLocaleString()} pending dues for ${customer.full_name} via ${paymentMethod.toUpperCase()}`,
@@ -1776,6 +1814,7 @@ class DatabaseService {
       }
     }
 
+    this.notify('all');
     return { success: true, message: 'System factory reset successful. All database records and accounts wiped clean. CEO super admin account retained.' };
   }
 }
