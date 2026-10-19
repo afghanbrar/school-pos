@@ -275,8 +275,8 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
     <div className="h-[calc(100vh-4rem)] flex flex-col lg:flex-row overflow-hidden bg-slate-100 dark:bg-slate-950">
       {/* LEFT SECTION: PRODUCT CATALOG & CATEGORIES */}
       <div className="flex-1 flex flex-col p-4 overflow-hidden border-r border-slate-200 dark:border-slate-800">
-        {/* Search Bar, View Mode Toggle & Category Filter Header */}
-        <div className="space-y-3 mb-4">
+        {/* Search Bar, View Mode Toggle & Sticky Category Filter Header */}
+        <div className="space-y-3 mb-3 sticky top-0 z-10 bg-slate-100/95 dark:bg-slate-950/95 backdrop-blur-md pt-1 pb-3 border-b border-slate-200/60 dark:border-slate-800/60">
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400 dark:text-slate-500" />
@@ -294,10 +294,10 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
               <button
                 type="button"
                 onClick={() => setPosViewMode('list')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   posViewMode === 'list'
                     ? 'bg-emerald-600 text-white shadow-md'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
                 title="List View"
               >
@@ -306,10 +306,10 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
               <button
                 type="button"
                 onClick={() => setPosViewMode('grid')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   posViewMode === 'grid'
                     ? 'bg-emerald-600 text-white shadow-md'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
                 }`}
                 title="Grid View"
               >
@@ -318,14 +318,14 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
             </div>
           </div>
 
-          {/* Category Pills Arranged in 2 Rows */}
-          <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {/* Category Filter Pills (Wrapped cleanly to fit screen width without horizontal scrolling) */}
+          <div className="flex flex-wrap gap-2 items-center">
             <button
               onClick={() => setSelectedCategory('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                 selectedCategory === 'all'
-                  ? 'bg-slate-900 text-white dark:bg-emerald-600 shadow-md'
-                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+                  ? 'bg-slate-900 text-white dark:bg-emerald-600 shadow-md font-bold'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
               }`}
             >
               <Filter className="w-3.5 h-3.5" /> All Items
@@ -335,10 +335,10 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                   selectedCategory === cat.id
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+                    ? 'bg-emerald-600 text-white shadow-md font-bold'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                 }`}
               >
                 <Tag className="w-3.5 h-3.5" /> {cat.name}

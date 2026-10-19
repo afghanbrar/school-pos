@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { 
-  Sparkles, 
-  Download, 
-  CheckCircle2, 
-  RefreshCw, 
-  AlertCircle, 
-  X, 
-  ShieldCheck, 
+import {
+  Sparkles,
+  Download,
+  CheckCircle2,
+  RefreshCw,
+  AlertCircle,
+  X,
+  ShieldCheck,
   ArrowUpCircle,
   Clock
 } from 'lucide-react';
@@ -17,14 +17,15 @@ interface UpdateNotificationModalProps {
   currentVersion?: string;
 }
 
-export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = ({ currentVersion = '1.0.7' }) => {
+
+export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = ({ currentVersion = '1.0.8' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
   const [updateStatus, setUpdateStatus] = useState<
     'idle' | 'checking' | 'available' | 'downloading' | 'completed' | 'error'
   >('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
+
   const [progress, setProgress] = useState({
     downloadedBytes: 0,
     totalBytes: 0,
@@ -153,20 +154,18 @@ export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div 
-        className={`relative w-full max-w-md bg-white dark:bg-slate-900 border rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${
-          updateStatus === 'completed' 
-            ? 'border-emerald-500 shadow-emerald-500/20' 
-            : 'border-slate-200 dark:border-slate-800 shadow-slate-950/40'
-        }`}
+      <div
+        className={`relative w-full max-w-md bg-white dark:bg-slate-900 border rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 ${updateStatus === 'completed'
+          ? 'border-emerald-500 shadow-emerald-500/20'
+          : 'border-slate-200 dark:border-slate-800 shadow-slate-950/40'
+          }`}
       >
         {/* Subtle decorative top accent line */}
-        <div 
-          className={`h-1.5 w-full ${
-            updateStatus === 'completed'
-              ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 animate-pulse'
-              : 'bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500'
-          }`} 
+        <div
+          className={`h-1.5 w-full ${updateStatus === 'completed'
+            ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 animate-pulse'
+            : 'bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500'
+            }`}
         />
 
         {/* Modal Close button (only available if not currently downloading or restarting) */}
@@ -248,8 +247,8 @@ export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = (
           <div className="p-6 space-y-6 text-center">
             <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-slate-100 dark:border-slate-800" />
-              <div 
-                className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" 
+              <div
+                className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"
               />
               <Download className="w-7 h-7 text-emerald-500 animate-bounce" />
             </div>
@@ -273,7 +272,7 @@ export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = (
               </div>
 
               <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-200 dark:border-slate-700">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300 shadow-sm"
                   style={{ width: `${progress.percentage}%` }}
                 />
