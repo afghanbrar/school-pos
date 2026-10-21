@@ -111,6 +111,79 @@ export function unrecordDeletedProduct(id: string): void {
   }
 }
 
+export function serializeProductForSupabase(p: Product): any {
+  let variantStr = p.variant || '';
+  if (p.wholesaler_name || p.wholesaler_details || p.purchase_payment_channel || p.purchased_by) {
+    try {
+      variantStr = JSON.stringify({
+        v: p.variant || '',
+        wn: p.wholesaler_name || '',
+        wd: p.wholesaler_details || '',
+        pc: p.purchase_payment_channel || '',
+        pb: p.purchased_by || '',
+      });
+    } catch {
+      variantStr = p.variant || '';
+    }
+  }
+  return {
+    id: p.id,
+    sku: p.sku || `SKU-${p.id.slice(-6)}`,
+    name: p.name,
+    category_id: p.category_id,
+    cost_price: Number(p.cost_price) || 0,
+    sale_price: Number(p.sale_price) || 0,
+    quantity: Number(p.quantity) || 0,
+    size: p.size || null,
+    color: p.color || null,
+    variant: variantStr || null,
+    created_at: p.created_at || new Date().toISOString(),
+    updated_at: p.updated_at || new Date().toISOString(),
+  };
+}
+
+export function deserializeProductFromSupabase(p: any): Product {
+  let variant: string | undefined = p.variant || undefined;
+  let wholesaler_name: string | undefined = p.wholesaler_name || undefined;
+  let wholesaler_details: string | undefined = p.wholesaler_details || undefined;
+  let purchase_payment_channel: string | undefined = p.purchase_payment_channel || undefined;
+  let purchased_by: string | undefined = p.purchased_by || undefined;
+
+  if (variant && typeof variant === 'string' && variant.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(variant);
+      if (parsed && typeof parsed === 'object') {
+        variant = parsed.v ?? parsed.variant ?? undefined;
+        wholesaler_name = wholesaler_name || parsed.wn || parsed.wholesaler_name || undefined;
+        wholesaler_details = wholesaler_details || parsed.wd || parsed.wholesaler_details || undefined;
+        purchase_payment_channel = purchase_payment_channel || parsed.pc || parsed.purchase_payment_channel || undefined;
+        purchased_by = purchased_by || parsed.pb || parsed.purchased_by || undefined;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    id: p.id,
+    sku: p.sku,
+    name: p.name,
+    category_id: p.category_id,
+    cost_price: Number(p.cost_price) || 0,
+    sale_price: Number(p.sale_price) || 0,
+    quantity: Number(p.quantity) || 0,
+    size: p.size || undefined,
+    color: p.color || undefined,
+    variant: variant || undefined,
+    wholesaler_name: wholesaler_name || undefined,
+    wholesaler_details: wholesaler_details || undefined,
+    purchase_payment_channel: purchase_payment_channel || undefined,
+    purchased_by: purchased_by || undefined,
+    created_at: p.created_at || new Date().toISOString(),
+    updated_at: p.updated_at || new Date().toISOString(),
+  };
+}
+
 export type DataCategory = 
   | 'products' 
   | 'categories' 
@@ -199,28 +272,34 @@ class DatabaseService {
       // ignore
     }
 
-    // 1. Permanently wipe all sales transactions, receipts, expenses, and activity logs
-    setItem(STORAGE_KEYS.TRANSACTIONS, []);
-    setItem(STORAGE_KEYS.CUSTOMERS, []);
-    setItem(STORAGE_KEYS.EXPENSES, []);
-    setItem(STORAGE_KEYS.HANDOVERS, []);
-    setItem(STORAGE_KEYS.ACTIVITIES, []);
+    // 1. Maintain persistent sales transactions, receipts, expenses, customers, handovers, activities without wiping!
+    if (localStorage.getItem(STORAGE_KEYS.TRANSACTIONS) === null) {
+      setItem(STORAGE_KEYS.TRANSACTIONS, []);
+    }
+    if (localStorage.getItem(STORAGE_KEYS.CUSTOMERS) === null) {
+      setItem(STORAGE_KEYS.CUSTOMERS, []);
+    }
+    if (localStorage.getItem(STORAGE_KEYS.EXPENSES) === null) {
+      setItem(STORAGE_KEYS.EXPENSES, []);
+    }
+    if (localStorage.getItem(STORAGE_KEYS.HANDOVERS) === null) {
+      setItem(STORAGE_KEYS.HANDOVERS, []);
+    }
+    if (localStorage.getItem(STORAGE_KEYS.ACTIVITIES) === null) {
+      setItem(STORAGE_KEYS.ACTIVITIES, []);
+    }
 
-    // 2. Keep ONLY categories created by the user (purge old default/template categories)
+    // 2. Keep ONLY categories created by the user (purge old default/template categories and deleted tombstones)
     const defaultCatIds = new Set(['cat-01', 'cat-02', 'cat-03', 'cat-04', 'cat-05', 'cat-06', 'cat-07']);
+    const deletedCatIds = getDeletedCategoryIds();
     let existingCategories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
-    existingCategories = existingCategories.filter(c => !defaultCatIds.has(c.id));
+    existingCategories = existingCategories.filter(c => !defaultCatIds.has(c.id) && !deletedCatIds.has(c.id));
     setItem(STORAGE_KEYS.CATEGORIES, existingCategories);
 
-    // 3. Keep user products (purge old demo products and remap legacy category references)
+    // 3. Keep user products (purge old demo products and deleted tombstones)
+    const deletedProdIds = getDeletedProductIds();
     let existingProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-    existingProducts = existingProducts.filter(p => !p.id.startsWith('prod-10'));
-    existingProducts = existingProducts.map(p => {
-      if (p.category_id === 'cat-04') {
-        return { ...p, category_id: 'cat-4840' };
-      }
-      return p;
-    });
+    existingProducts = existingProducts.filter(p => !p.id.startsWith('prod-10') && !deletedProdIds.has(p.id));
     setItem(STORAGE_KEYS.PRODUCTS, existingProducts);
 
     // 4. Retain ONLY CEO and Rubina Iftikhar accounts; permanently remove all others
@@ -341,7 +420,7 @@ class DatabaseService {
           }
         }
 
-        const validCategories: Category[] = remoteCategories
+        const validRemoteCategories: Category[] = remoteCategories
           .filter(c => !deletedCatIds.has(c.id))
           .map(c => ({
             id: c.id,
@@ -350,7 +429,18 @@ class DatabaseService {
             icon_name: c.icon_name || 'Tag',
             created_at: c.created_at || new Date().toISOString(),
           }));
-        setItem(STORAGE_KEYS.CATEGORIES, validCategories);
+
+        // Merge remote with local categories so unsynced local categories are never wiped
+        const localCategories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []).filter(c => !deletedCatIds.has(c.id));
+        const catMap = new Map<string, Category>();
+        validRemoteCategories.forEach(c => catMap.set(c.id, c));
+        localCategories.forEach(c => {
+          if (!catMap.has(c.id)) {
+            catMap.set(c.id, c);
+          }
+        });
+        const mergedCategories = Array.from(catMap.values());
+        setItem(STORAGE_KEYS.CATEGORIES, mergedCategories);
       }
 
       // 3. Pull Products
@@ -366,27 +456,30 @@ class DatabaseService {
           }
         }
 
-        const validProducts: Product[] = remoteProducts
+        const validRemoteProducts: Product[] = remoteProducts
           .filter(p => !deletedProdIds.has(p.id))
-          .map(p => ({
-            id: p.id,
-            sku: p.sku,
-            name: p.name,
-            category_id: p.category_id,
-            cost_price: Number(p.cost_price) || 0,
-            sale_price: Number(p.sale_price) || 0,
-            quantity: Number(p.quantity) || 0,
-            size: p.size || null,
-            color: p.color || null,
-            variant: p.variant || null,
-            wholesaler_name: p.wholesaler_name || null,
-            wholesaler_details: p.wholesaler_details || null,
-            purchase_payment_channel: p.purchase_payment_channel || null,
-            purchased_by: p.purchased_by || null,
-            created_at: p.created_at || new Date().toISOString(),
-            updated_at: p.updated_at || new Date().toISOString(),
-          }));
-        setItem(STORAGE_KEYS.PRODUCTS, validProducts);
+          .map(p => deserializeProductFromSupabase(p));
+
+        // Merge remote with local products so local/newly added products are never erased
+        const localProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []).filter(p => !deletedProdIds.has(p.id));
+        const prodMap = new Map<string, Product>();
+        validRemoteProducts.forEach(p => prodMap.set(p.id, p));
+        localProducts.forEach(p => {
+          if (!prodMap.has(p.id)) {
+            prodMap.set(p.id, p);
+          } else {
+            const remoteItem = prodMap.get(p.id)!;
+            prodMap.set(p.id, {
+              ...remoteItem,
+              wholesaler_name: remoteItem.wholesaler_name || p.wholesaler_name,
+              wholesaler_details: remoteItem.wholesaler_details || p.wholesaler_details,
+              purchase_payment_channel: remoteItem.purchase_payment_channel || p.purchase_payment_channel,
+              purchased_by: remoteItem.purchased_by || p.purchased_by,
+            });
+          }
+        });
+        const mergedProducts = Array.from(prodMap.values());
+        setItem(STORAGE_KEYS.PRODUCTS, mergedProducts);
       }
 
       // 4. Pull Transactions
@@ -487,24 +580,7 @@ class DatabaseService {
       const validProducts = products.filter(p => !deletedProdIds.has(p.id));
       if (validProducts.length > 0) {
         const { error: prodErr } = await this.supabase.from('products').upsert(
-          validProducts.map(p => ({
-            id: p.id,
-            sku: p.sku,
-            name: p.name,
-            category_id: p.category_id,
-            cost_price: p.cost_price,
-            sale_price: p.sale_price,
-            quantity: p.quantity,
-            size: p.size || null,
-            color: p.color || null,
-            variant: p.variant || null,
-            wholesaler_name: p.wholesaler_name || null,
-            wholesaler_details: p.wholesaler_details || null,
-            purchase_payment_channel: p.purchase_payment_channel || null,
-            purchased_by: p.purchased_by || null,
-            created_at: p.created_at || new Date().toISOString(),
-            updated_at: p.updated_at || new Date().toISOString(),
-          }))
+          validProducts.map(p => serializeProductForSupabase(p))
         );
         if (prodErr) console.warn('Products Table sync:', prodErr.message);
       }
@@ -1072,6 +1148,7 @@ class DatabaseService {
     recordDeletedCategory(id);
 
     const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
+    const cat = categories.find(c => c.id === id);
     const filtered = categories.filter(c => c.id !== id);
     setItem(STORAGE_KEYS.CATEGORIES, filtered);
 
@@ -1084,13 +1161,25 @@ class DatabaseService {
 
     if (this.supabase) {
       try {
-        await this.supabase.from('categories').delete().eq('id', id);
         if (defaultCat) {
           await this.supabase.from('products').update({ category_id: defaultCat }).eq('category_id', id);
+        }
+        const { error } = await this.supabase.from('categories').delete().eq('id', id);
+        if (error) {
+          console.error('Failed to permanently delete category from Supabase:', error);
         }
       } catch (err) {
         console.warn('Failed to delete category in Supabase:', err);
       }
+    }
+
+    if (cat) {
+      void this.logActivity(
+        'category_created',
+        'Category Permanently Deleted',
+        `Permanently deleted category "${cat.name}"`,
+        { category_id: id, name: cat.name }
+      );
     }
   }
 
@@ -1119,24 +1208,11 @@ class DatabaseService {
 
     if (this.supabase) {
       try {
-        await this.supabase.from('products').upsert({
-          id: newProduct.id,
-          sku: newProduct.sku,
-          name: newProduct.name,
-          category_id: newProduct.category_id,
-          cost_price: newProduct.cost_price,
-          sale_price: newProduct.sale_price,
-          quantity: newProduct.quantity,
-          size: newProduct.size || null,
-          color: newProduct.color || null,
-          variant: newProduct.variant || null,
-          wholesaler_name: newProduct.wholesaler_name || null,
-          wholesaler_details: newProduct.wholesaler_details || null,
-          purchase_payment_channel: newProduct.purchase_payment_channel || null,
-          purchased_by: newProduct.purchased_by || null,
-          created_at: newProduct.created_at,
-          updated_at: newProduct.updated_at,
-        });
+        const payload = serializeProductForSupabase(newProduct);
+        const { error } = await this.supabase.from('products').upsert(payload);
+        if (error) {
+          console.error('Failed to upsert product in Supabase:', error);
+        }
       } catch (err) {
         console.warn('Failed to upsert product in Supabase:', err);
       }
@@ -1157,6 +1233,8 @@ class DatabaseService {
     const index = products.findIndex(p => p.id === id);
     if (index === -1) throw new Error('Product not found.');
 
+    unrecordDeletedProduct(id);
+
     const updated = {
       ...products[index],
       ...productData,
@@ -1169,24 +1247,11 @@ class DatabaseService {
 
     if (this.supabase) {
       try {
-        await this.supabase.from('products').upsert({
-          id: updated.id,
-          sku: updated.sku,
-          name: updated.name,
-          category_id: updated.category_id,
-          cost_price: updated.cost_price,
-          sale_price: updated.sale_price,
-          quantity: updated.quantity,
-          size: updated.size || null,
-          color: updated.color || null,
-          variant: updated.variant || null,
-          wholesaler_name: updated.wholesaler_name || null,
-          wholesaler_details: updated.wholesaler_details || null,
-          purchase_payment_channel: updated.purchase_payment_channel || null,
-          purchased_by: updated.purchased_by || null,
-          created_at: updated.created_at,
-          updated_at: updated.updated_at,
-        });
+        const payload = serializeProductForSupabase(updated);
+        const { error } = await this.supabase.from('products').upsert(payload);
+        if (error) {
+          console.error('Failed to update product in Supabase:', error);
+        }
       } catch (err) {
         console.warn('Failed to update product in Supabase:', err);
       }
@@ -1213,7 +1278,10 @@ class DatabaseService {
 
     if (this.supabase) {
       try {
-        await this.supabase.from('products').delete().eq('id', id);
+        const { error } = await this.supabase.from('products').delete().eq('id', id);
+        if (error) {
+          console.error('Failed to permanently delete product from Supabase:', error);
+        }
       } catch (err) {
         console.warn('Failed to delete product in Supabase:', err);
       }
