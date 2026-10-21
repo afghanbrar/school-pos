@@ -32,6 +32,8 @@ const STORAGE_KEYS = {
   USERS: 'school_pos_users_v4',
   CATEGORIES: 'school_pos_categories_v4',
   PRODUCTS: 'school_pos_products_v4',
+  DELETED_CATEGORIES: 'school_pos_deleted_categories_v5',
+  DELETED_PRODUCTS: 'school_pos_deleted_products_v5',
   TRANSACTIONS: 'school_pos_transactions_v5',
   SETTINGS: 'school_pos_settings_v4',
   CUSTOMERS: 'school_pos_customers_v5',
@@ -70,6 +72,42 @@ function setItem<T>(key: string, value: T): void {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
     console.error('LocalStorage error:', e);
+  }
+}
+
+export function getDeletedCategoryIds(): Set<string> {
+  const ids = getItem<string[]>(STORAGE_KEYS.DELETED_CATEGORIES, []);
+  return new Set(ids);
+}
+
+export function recordDeletedCategory(id: string): void {
+  const set = getDeletedCategoryIds();
+  set.add(id);
+  setItem(STORAGE_KEYS.DELETED_CATEGORIES, Array.from(set));
+}
+
+export function unrecordDeletedCategory(id: string): void {
+  const set = getDeletedCategoryIds();
+  if (set.delete(id)) {
+    setItem(STORAGE_KEYS.DELETED_CATEGORIES, Array.from(set));
+  }
+}
+
+export function getDeletedProductIds(): Set<string> {
+  const ids = getItem<string[]>(STORAGE_KEYS.DELETED_PRODUCTS, []);
+  return new Set(ids);
+}
+
+export function recordDeletedProduct(id: string): void {
+  const set = getDeletedProductIds();
+  set.add(id);
+  setItem(STORAGE_KEYS.DELETED_PRODUCTS, Array.from(set));
+}
+
+export function unrecordDeletedProduct(id: string): void {
+  const set = getDeletedProductIds();
+  if (set.delete(id)) {
+    setItem(STORAGE_KEYS.DELETED_PRODUCTS, Array.from(set));
   }
 }
 
@@ -292,39 +330,63 @@ class DatabaseService {
 
       // 2. Pull Categories
       const { data: remoteCategories, error: cErr } = await this.supabase.from('categories').select('*');
-      if (!cErr && remoteCategories && remoteCategories.length > 0) {
-        const mergedCategories: Category[] = remoteCategories.map(c => ({
-          id: c.id,
-          name: c.name,
-          description: c.description || '',
-          icon_name: c.icon_name || 'Tag',
-          created_at: c.created_at || new Date().toISOString(),
-        }));
-        setItem(STORAGE_KEYS.CATEGORIES, mergedCategories);
+      if (!cErr && remoteCategories) {
+        const deletedCatIds = getDeletedCategoryIds();
+        const categoriesToDeleteRemotely = remoteCategories.filter(c => deletedCatIds.has(c.id));
+        if (categoriesToDeleteRemotely.length > 0) {
+          try {
+            await this.supabase.from('categories').delete().in('id', categoriesToDeleteRemotely.map(c => c.id));
+          } catch (e) {
+            console.warn('Failed to remote purge deleted categories:', e);
+          }
+        }
+
+        const validCategories: Category[] = remoteCategories
+          .filter(c => !deletedCatIds.has(c.id))
+          .map(c => ({
+            id: c.id,
+            name: c.name,
+            description: c.description || '',
+            icon_name: c.icon_name || 'Tag',
+            created_at: c.created_at || new Date().toISOString(),
+          }));
+        setItem(STORAGE_KEYS.CATEGORIES, validCategories);
       }
 
       // 3. Pull Products
       const { data: remoteProducts, error: prErr } = await this.supabase.from('products').select('*');
-      if (!prErr && remoteProducts && remoteProducts.length > 0) {
-        const mergedProducts: Product[] = remoteProducts.map(p => ({
-          id: p.id,
-          sku: p.sku,
-          name: p.name,
-          category_id: p.category_id,
-          cost_price: Number(p.cost_price) || 0,
-          sale_price: Number(p.sale_price) || 0,
-          quantity: Number(p.quantity) || 0,
-          size: p.size || null,
-          color: p.color || null,
-          variant: p.variant || null,
-          wholesaler_name: p.wholesaler_name || null,
-          wholesaler_details: p.wholesaler_details || null,
-          purchase_payment_channel: p.purchase_payment_channel || null,
-          purchased_by: p.purchased_by || null,
-          created_at: p.created_at || new Date().toISOString(),
-          updated_at: p.updated_at || new Date().toISOString(),
-        }));
-        setItem(STORAGE_KEYS.PRODUCTS, mergedProducts);
+      if (!prErr && remoteProducts) {
+        const deletedProdIds = getDeletedProductIds();
+        const productsToDeleteRemotely = remoteProducts.filter(p => deletedProdIds.has(p.id));
+        if (productsToDeleteRemotely.length > 0) {
+          try {
+            await this.supabase.from('products').delete().in('id', productsToDeleteRemotely.map(p => p.id));
+          } catch (e) {
+            console.warn('Failed to remote purge deleted products:', e);
+          }
+        }
+
+        const validProducts: Product[] = remoteProducts
+          .filter(p => !deletedProdIds.has(p.id))
+          .map(p => ({
+            id: p.id,
+            sku: p.sku,
+            name: p.name,
+            category_id: p.category_id,
+            cost_price: Number(p.cost_price) || 0,
+            sale_price: Number(p.sale_price) || 0,
+            quantity: Number(p.quantity) || 0,
+            size: p.size || null,
+            color: p.color || null,
+            variant: p.variant || null,
+            wholesaler_name: p.wholesaler_name || null,
+            wholesaler_details: p.wholesaler_details || null,
+            purchase_payment_channel: p.purchase_payment_channel || null,
+            purchased_by: p.purchased_by || null,
+            created_at: p.created_at || new Date().toISOString(),
+            updated_at: p.updated_at || new Date().toISOString(),
+          }));
+        setItem(STORAGE_KEYS.PRODUCTS, validProducts);
       }
 
       // 4. Pull Transactions
@@ -386,11 +448,21 @@ class DatabaseService {
     }
 
     try {
-      // 1. Sync Categories
+      // 1. Purge Deleted Categories and Sync Valid Categories
+      const deletedCatIds = getDeletedCategoryIds();
+      if (deletedCatIds.size > 0) {
+        try {
+          await this.supabase.from('categories').delete().in('id', Array.from(deletedCatIds));
+        } catch (e) {
+          console.warn('Purge deleted categories error:', e);
+        }
+      }
+
       const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
-      if (categories.length > 0) {
+      const validCategories = categories.filter(c => !deletedCatIds.has(c.id));
+      if (validCategories.length > 0) {
         const { error: catErr } = await this.supabase.from('categories').upsert(
-          categories.map(c => ({
+          validCategories.map(c => ({
             id: c.id,
             name: c.name,
             description: c.description || null,
@@ -401,11 +473,21 @@ class DatabaseService {
         if (catErr) console.warn('Categories Table sync:', catErr.message);
       }
 
-      // 2. Sync Products
+      // 2. Purge Deleted Products and Sync Valid Products
+      const deletedProdIds = getDeletedProductIds();
+      if (deletedProdIds.size > 0) {
+        try {
+          await this.supabase.from('products').delete().in('id', Array.from(deletedProdIds));
+        } catch (e) {
+          console.warn('Purge deleted products error:', e);
+        }
+      }
+
       const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-      if (products.length > 0) {
+      const validProducts = products.filter(p => !deletedProdIds.has(p.id));
+      if (validProducts.length > 0) {
         const { error: prodErr } = await this.supabase.from('products').upsert(
-          products.map(p => ({
+          validProducts.map(p => ({
             id: p.id,
             sku: p.sku,
             name: p.name,
@@ -934,7 +1016,9 @@ class DatabaseService {
   /* ================= CATEGORIES & PRODUCTS (INVENTORY) ================= */
 
   public async getCategories(): Promise<Category[]> {
-    return getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const deletedCatIds = getDeletedCategoryIds();
+    return categories.filter(c => !deletedCatIds.has(c.id));
   }
 
   public async createCategory(name: string, description?: string, icon_name?: string): Promise<Category> {
@@ -945,8 +1029,11 @@ class DatabaseService {
       throw new Error('Category already exists.');
     }
 
+    const uniqueId = `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    unrecordDeletedCategory(uniqueId);
+
     const newCategory: Category = {
-      id: `cat-${Date.now().toString().slice(-4)}`,
+      id: uniqueId,
       name: trimmedName,
       description: description?.trim() || '',
       icon_name: icon_name || 'Tag',
@@ -958,15 +1045,17 @@ class DatabaseService {
     this.notify('categories');
 
     if (this.supabase) {
-      this.runBackgroundSync(async () => {
-        await this.supabase!.from('categories').upsert({
+      try {
+        await this.supabase.from('categories').upsert({
           id: newCategory.id,
           name: newCategory.name,
           description: newCategory.description || null,
           icon_name: newCategory.icon_name || 'Tag',
           created_at: newCategory.created_at,
         });
-      });
+      } catch (err) {
+        console.warn('Failed to upsert category in Supabase:', err);
+      }
     }
 
     void this.logActivity(
@@ -980,6 +1069,8 @@ class DatabaseService {
   }
 
   public async deleteCategory(id: string): Promise<void> {
+    recordDeletedCategory(id);
+
     const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
     const filtered = categories.filter(c => c.id !== id);
     setItem(STORAGE_KEYS.CATEGORIES, filtered);
@@ -992,22 +1083,32 @@ class DatabaseService {
     this.notify('products');
 
     if (this.supabase) {
-      this.runBackgroundSync(async () => {
-        await this.supabase!.from('categories').delete().eq('id', id);
-      });
+      try {
+        await this.supabase.from('categories').delete().eq('id', id);
+        if (defaultCat) {
+          await this.supabase.from('products').update({ category_id: defaultCat }).eq('category_id', id);
+        }
+      } catch (err) {
+        console.warn('Failed to delete category in Supabase:', err);
+      }
     }
   }
 
   public async getProducts(): Promise<Product[]> {
-    return getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const deletedProdIds = getDeletedProductIds();
+    return products.filter(p => !deletedProdIds.has(p.id));
   }
 
   public async addProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 
+    const uniqueId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    unrecordDeletedProduct(uniqueId);
+
     const newProduct: Product = {
       ...productData,
-      id: `prod-${Date.now().toString().slice(-4)}`,
+      id: uniqueId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1017,8 +1118,8 @@ class DatabaseService {
     this.notify('products');
 
     if (this.supabase) {
-      this.runBackgroundSync(async () => {
-        await this.supabase!.from('products').upsert({
+      try {
+        await this.supabase.from('products').upsert({
           id: newProduct.id,
           sku: newProduct.sku,
           name: newProduct.name,
@@ -1036,7 +1137,9 @@ class DatabaseService {
           created_at: newProduct.created_at,
           updated_at: newProduct.updated_at,
         });
-      });
+      } catch (err) {
+        console.warn('Failed to upsert product in Supabase:', err);
+      }
     }
 
     void this.logActivity(
@@ -1065,8 +1168,8 @@ class DatabaseService {
     this.notify('products');
 
     if (this.supabase) {
-      this.runBackgroundSync(async () => {
-        await this.supabase!.from('products').upsert({
+      try {
+        await this.supabase.from('products').upsert({
           id: updated.id,
           sku: updated.sku,
           name: updated.name,
@@ -1084,7 +1187,9 @@ class DatabaseService {
           created_at: updated.created_at,
           updated_at: updated.updated_at,
         });
-      });
+      } catch (err) {
+        console.warn('Failed to update product in Supabase:', err);
+      }
     }
 
     void this.logActivity(
@@ -1098,6 +1203,8 @@ class DatabaseService {
   }
 
   public async deleteProduct(id: string): Promise<void> {
+    recordDeletedProduct(id);
+
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const prod = products.find(p => p.id === id);
     const filtered = products.filter(p => p.id !== id);
@@ -1105,9 +1212,11 @@ class DatabaseService {
     this.notify('products');
 
     if (this.supabase) {
-      this.runBackgroundSync(async () => {
-        await this.supabase!.from('products').delete().eq('id', id);
-      });
+      try {
+        await this.supabase.from('products').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Failed to delete product in Supabase:', err);
+      }
     }
 
     if (prod) {
