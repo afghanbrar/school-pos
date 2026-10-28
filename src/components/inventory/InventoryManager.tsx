@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Product, Category, SchoolSettings } from '../../types';
 import { db } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
@@ -39,6 +40,8 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
   
   // Deletion Confirmation Modal State
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'Product' | 'Category' } | null>(null);
+
+
   
   // Grid vs List view toggle
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -70,6 +73,17 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
   const [purchasedBy, setPurchasedBy] = useState('');
 
   const [prodError, setProdError] = useState<string | null>(null);
+
+  // Prevent background scrolling when any modal is open
+  useEffect(() => {
+    if (isProductModalOpen || isCategoryModalOpen || deleteTarget) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isProductModalOpen, isCategoryModalOpen, deleteTarget]);
 
   const currency = settings.currency_symbol || 'PKR';
 
@@ -673,22 +687,31 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
       )}
 
       {/* PRODUCT ADD / EDIT MODAL WITH WHOLESALER & PAYMENT FIELDS */}
-      {isProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[88vh] overflow-hidden">
+      {isProductModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-sm overflow-hidden animate-fadeIn"
+          onClick={() => setIsProductModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[85vh] overflow-hidden animate-popIn"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Modal Header - Fixed */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-emerald-600" /> 
                 {editingProductId ? 'Edit Product & Wholesaler Info' : 'Store New Inventory Stock & Wholesaler Details'}
               </h3>
-              <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-xl cursor-pointer">
+              <button 
+                onClick={() => setIsProductModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-xl cursor-pointer transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Body - Scrollable */}
-            <form id="product-form" onSubmit={handleSaveProduct} className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+            {/* Modal Body - Scrollable internally without page scroll */}
+            <form id="product-form" onSubmit={handleSaveProduct} className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1 overscroll-contain">
               {prodError && (
                 <div className="mb-2 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-2 text-rose-700 dark:text-rose-300 text-xs animate-shake">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
@@ -883,10 +906,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                   </div>
                 </div>
               </div>
-
             </form>
 
-            {/* Modal Footer - Fixed Action Buttons (Never pushed down or hidden) */}
+            {/* Modal Footer - Fixed Action Buttons */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3 shrink-0 rounded-b-3xl">
               <button
                 type="button"
@@ -905,18 +927,28 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* CREATE CATEGORY MODAL */}
-      {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+      {isCategoryModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-hidden animate-fadeIn"
+          onClick={() => setIsCategoryModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 animate-popIn"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Tag className="w-5 h-5 text-emerald-600" /> Create New Inventory Category
               </h3>
-              <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                onClick={() => setIsCategoryModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-xl cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -953,20 +985,21 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
                 <button
                   type="button"
                   onClick={() => setIsCategoryModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-semibold"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700 cursor-pointer"
                 >
                   Save Category
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DELETION CONFIRMATION DIALOG MODAL */}

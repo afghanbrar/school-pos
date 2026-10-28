@@ -32,7 +32,7 @@ const githubAsset = targetArtifact.replace(/ /g, '.');
 
 const manifest = {
   version: version,
-  notes: `School POS System Live Release v${version} - Permanent Category & Product DB Deletion, Safe Product Sync & Zero Data Loss`,
+  notes: `School POS System Live Release v${version} - Fixed Product Add Modal Centering & Internal Form Scroll, Global Real-Time Staff Audit & Activity Stream Reconciliation, Zero Data Loss`,
   pub_date: new Date().toISOString(),
   platforms: {
     'windows-x86_64': {

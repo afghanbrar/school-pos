@@ -296,10 +296,11 @@ class DatabaseService {
     existingCategories = existingCategories.filter(c => !defaultCatIds.has(c.id) && !deletedCatIds.has(c.id));
     setItem(STORAGE_KEYS.CATEGORIES, existingCategories);
 
-    // 3. Keep user products (purge old demo products and deleted tombstones)
+    // 3. Keep user products (purge only obsolete demo products and deleted tombstones)
+    const demoProdIds = new Set(['prod-101', 'prod-102', 'prod-103', 'prod-104', 'prod-105', 'prod-106', 'prod-107', 'prod-108', 'prod-109', 'prod-110']);
     const deletedProdIds = getDeletedProductIds();
     let existingProducts = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-    existingProducts = existingProducts.filter(p => !p.id.startsWith('prod-10') && !deletedProdIds.has(p.id));
+    existingProducts = existingProducts.filter(p => !demoProdIds.has(p.id) && !deletedProdIds.has(p.id));
     setItem(STORAGE_KEYS.PRODUCTS, existingProducts);
 
     // 4. Retain ONLY CEO and Rubina Iftikhar accounts; permanently remove all others
@@ -480,6 +481,9 @@ class DatabaseService {
         });
         const mergedProducts = Array.from(prodMap.values());
         setItem(STORAGE_KEYS.PRODUCTS, mergedProducts);
+        try {
+          localStorage.setItem('school_pos_products_emergency_backup', JSON.stringify(mergedProducts));
+        } catch {}
       }
 
       // 4. Pull Transactions
@@ -524,7 +528,43 @@ class DatabaseService {
         setItem(STORAGE_KEYS.TRANSACTIONS, Array.from(txMap.values()));
       }
 
+      // 5. Pull Live Remote Activity Logs (if available)
+      if (this.supabase) {
+        try {
+          const { data: remoteLogs, error: logErr } = await this.supabase
+            .from('activity_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(300);
+          if (!logErr && remoteLogs && remoteLogs.length > 0) {
+            const localLogs = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, []);
+            const logMap = new Map<string, ActivityLog>();
+            localLogs.forEach(l => logMap.set(l.id, l));
+            remoteLogs.forEach((r: any) => {
+              logMap.set(r.id, {
+                id: r.id,
+                user_id: r.user_id,
+                user_name: r.user_name,
+                user_role: r.user_role,
+                action: r.action,
+                title: r.title,
+                description: r.description,
+                details: r.details,
+                created_at: r.created_at,
+              });
+            });
+            setItem(STORAGE_KEYS.ACTIVITIES, Array.from(logMap.values()));
+          }
+        } catch {
+          // Gracefully continue if remote table does not exist
+        }
+      }
+
+      // 6. Reconcile Activities with All Products & Transactions
+      await this.reconcileActivityLogs();
+
       this.notify('all');
+      this.notify('activities');
       return { success: true, message: 'Cloud database synchronized with local system.' };
     } catch (e: any) {
       console.warn('Supabase to local pull notice:', e);
@@ -1116,23 +1156,23 @@ class DatabaseService {
       created_at: new Date().toISOString(),
     };
 
+    if (this.supabase) {
+      const { error } = await this.supabase.from('categories').upsert({
+        id: newCategory.id,
+        name: newCategory.name,
+        description: newCategory.description || null,
+        icon_name: newCategory.icon_name || 'Tag',
+        created_at: newCategory.created_at,
+      });
+      if (error) {
+        console.error('Supabase category upsert error:', error);
+        throw new Error(`Cloud Database Error: Failed to save category to Supabase (${error.message})`);
+      }
+    }
+
     categories.unshift(newCategory);
     setItem(STORAGE_KEYS.CATEGORIES, categories);
     this.notify('categories');
-
-    if (this.supabase) {
-      try {
-        await this.supabase.from('categories').upsert({
-          id: newCategory.id,
-          name: newCategory.name,
-          description: newCategory.description || null,
-          icon_name: newCategory.icon_name || 'Tag',
-          created_at: newCategory.created_at,
-        });
-      } catch (err) {
-        console.warn('Failed to upsert category in Supabase:', err);
-      }
-    }
 
     void this.logActivity(
       'category_created',
@@ -1145,33 +1185,31 @@ class DatabaseService {
   }
 
   public async deleteCategory(id: string): Promise<void> {
-    recordDeletedCategory(id);
-
     const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
     const cat = categories.find(c => c.id === id);
     const filtered = categories.filter(c => c.id !== id);
-    setItem(STORAGE_KEYS.CATEGORIES, filtered);
 
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
     const defaultCat = filtered[0]?.id || '';
+
+    if (this.supabase) {
+      if (defaultCat) {
+        await this.supabase.from('products').update({ category_id: defaultCat }).eq('category_id', id);
+      }
+      const { error } = await this.supabase.from('categories').delete().eq('id', id);
+      if (error) {
+        console.error('Failed to permanently delete category from Supabase:', error);
+        throw new Error(`Cloud Database Error: Failed to delete category from Supabase (${error.message})`);
+      }
+    }
+
+    recordDeletedCategory(id);
+    setItem(STORAGE_KEYS.CATEGORIES, filtered);
+
     const updatedProducts = products.map(p => p.category_id === id ? { ...p, category_id: defaultCat } : p);
     setItem(STORAGE_KEYS.PRODUCTS, updatedProducts);
     this.notify('categories');
     this.notify('products');
-
-    if (this.supabase) {
-      try {
-        if (defaultCat) {
-          await this.supabase.from('products').update({ category_id: defaultCat }).eq('category_id', id);
-        }
-        const { error } = await this.supabase.from('categories').delete().eq('id', id);
-        if (error) {
-          console.error('Failed to permanently delete category from Supabase:', error);
-        }
-      } catch (err) {
-        console.warn('Failed to delete category in Supabase:', err);
-      }
-    }
 
     if (cat) {
       void this.logActivity(
@@ -1202,21 +1240,20 @@ class DatabaseService {
       updated_at: new Date().toISOString(),
     };
 
+    // Strict Cloud-First Validation: If Supabase is connected, save to cloud FIRST.
+    // If Supabase fails for any reason, throw error immediately so frontend displays exact error toast!
+    if (this.supabase) {
+      const payload = serializeProductForSupabase(newProduct);
+      const { error } = await this.supabase.from('products').upsert(payload);
+      if (error) {
+        console.error('Supabase upsert product error:', error);
+        throw new Error(`Cloud Database Error: Failed to save product to Supabase (${error.message})`);
+      }
+    }
+
     products.unshift(newProduct);
     setItem(STORAGE_KEYS.PRODUCTS, products);
     this.notify('products');
-
-    if (this.supabase) {
-      try {
-        const payload = serializeProductForSupabase(newProduct);
-        const { error } = await this.supabase.from('products').upsert(payload);
-        if (error) {
-          console.error('Failed to upsert product in Supabase:', error);
-        }
-      } catch (err) {
-        console.warn('Failed to upsert product in Supabase:', err);
-      }
-    }
 
     void this.logActivity(
       'product_added',
@@ -1241,21 +1278,19 @@ class DatabaseService {
       updated_at: new Date().toISOString(),
     };
 
+    // Strict Cloud-First Validation: Update Supabase FIRST.
+    if (this.supabase) {
+      const payload = serializeProductForSupabase(updated);
+      const { error } = await this.supabase.from('products').upsert(payload);
+      if (error) {
+        console.error('Supabase update product error:', error);
+        throw new Error(`Cloud Database Error: Failed to update product in Supabase (${error.message})`);
+      }
+    }
+
     products[index] = updated;
     setItem(STORAGE_KEYS.PRODUCTS, products);
     this.notify('products');
-
-    if (this.supabase) {
-      try {
-        const payload = serializeProductForSupabase(updated);
-        const { error } = await this.supabase.from('products').upsert(payload);
-        if (error) {
-          console.error('Failed to update product in Supabase:', error);
-        }
-      } catch (err) {
-        console.warn('Failed to update product in Supabase:', err);
-      }
-    }
 
     void this.logActivity(
       'product_updated',
@@ -1268,6 +1303,14 @@ class DatabaseService {
   }
 
   public async deleteProduct(id: string): Promise<void> {
+    if (this.supabase) {
+      const { error } = await this.supabase.from('products').delete().eq('id', id);
+      if (error) {
+        console.error('Supabase delete product error:', error);
+        throw new Error(`Cloud Database Error: Failed to delete product from Supabase (${error.message})`);
+      }
+    }
+
     recordDeletedProduct(id);
 
     const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
@@ -1275,17 +1318,6 @@ class DatabaseService {
     const filtered = products.filter(p => p.id !== id);
     setItem(STORAGE_KEYS.PRODUCTS, filtered);
     this.notify('products');
-
-    if (this.supabase) {
-      try {
-        const { error } = await this.supabase.from('products').delete().eq('id', id);
-        if (error) {
-          console.error('Failed to permanently delete product from Supabase:', error);
-        }
-      } catch (err) {
-        console.warn('Failed to delete product in Supabase:', err);
-      }
-    }
 
     if (prod) {
       void this.logActivity(
@@ -1656,8 +1688,121 @@ class DatabaseService {
 
   /* ================= REAL-TIME ACTIVITY LOGS ================= */
 
+  /**
+   * Reconciles activity logs: ensures all existing products, transactions, and remote activity logs
+   * are synthesized into live audit logs so CEO has global transparency.
+   */
+  public async reconcileActivityLogs(): Promise<void> {
+    const activities = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, []);
+    const activityIds = new Set(activities.map(a => a.id));
+    let changed = false;
+
+    // A. Reconcile remote activity logs from Supabase
+    if (this.supabase) {
+      try {
+        const { data: remoteLogs, error } = await this.supabase
+          .from('activity_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (!error && remoteLogs && remoteLogs.length > 0) {
+          for (const r of remoteLogs) {
+            if (!activityIds.has(r.id)) {
+              activities.push({
+                id: r.id,
+                user_id: r.user_id,
+                user_name: r.user_name,
+                user_role: r.user_role,
+                action: r.action,
+                title: r.title,
+                description: r.description,
+                details: r.details,
+                created_at: r.created_at,
+              });
+              activityIds.add(r.id);
+              changed = true;
+            }
+          }
+        }
+      } catch {
+        // Table may not exist yet in schema cache
+      }
+    }
+
+    // B. Synthesize activity log for EVERY product in the system (e.g. 44 products in Supabase)
+    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
+    for (const p of products) {
+      const synthesizedId = `act-prod-${p.id}`;
+      const exists = activities.some(a => a.id === synthesizedId || a.details?.product_id === p.id);
+      if (!exists) {
+        const isCeoPurchased = (p.purchased_by || '').toLowerCase().includes('ceo');
+        activities.push({
+          id: synthesizedId,
+          user_id: isCeoPurchased ? 'usr-ceo-01' : 'usr-staff-01',
+          user_name: p.purchased_by || (isCeoPurchased ? 'Chief Executive Officer (CEO)' : 'Inventory Staff'),
+          user_role: isCeoPurchased ? 'principal' : 'staff',
+          action: 'product_added',
+          title: 'Inventory Stock Added',
+          description: `Added product "${p.name}" (SKU: ${p.sku}) • Wholesaler: ${p.wholesaler_name || 'N/A'} • Qty: ${p.quantity} units`,
+          details: {
+            product_id: p.id,
+            sku: p.sku,
+            wholesaler: p.wholesaler_name,
+            wholesaler_details: p.wholesaler_details,
+            channel: p.purchase_payment_channel,
+            cost_price: p.cost_price,
+            sale_price: p.sale_price,
+            quantity: p.quantity,
+          },
+          created_at: p.created_at || new Date().toISOString(),
+        });
+        activityIds.add(synthesizedId);
+        changed = true;
+      }
+    }
+
+    // C. Synthesize activity log for all transactions
+    const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    for (const t of transactions) {
+      const synthesizedId = `act-tx-${t.id}`;
+      const exists = activities.some(a => a.id === synthesizedId || a.details?.invoice_number === t.invoice_number);
+      if (!exists) {
+        activities.push({
+          id: synthesizedId,
+          user_id: t.staff_id || 'usr-staff-01',
+          user_name: 'Cashier Staff',
+          user_role: 'staff',
+          action: 'sale_created',
+          title: 'New POS Sale Invoice Created',
+          description: `Processed invoice ${t.invoice_number} for ${t.buyer_name} (${t.buyer_type}) • Total: PKR ${(t.total_amount || 0).toLocaleString()}`,
+          details: {
+            invoice_number: t.invoice_number,
+            buyer_name: t.buyer_name,
+            total_amount: t.total_amount,
+            paid_amount: t.paid_amount,
+            payment_method: t.payment_method,
+          },
+          created_at: t.created_at || new Date().toISOString(),
+        });
+        activityIds.add(synthesizedId);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (activities.length > 1000) {
+        activities.length = 1000;
+      }
+      setItem(STORAGE_KEYS.ACTIVITIES, activities);
+      this.notify('activities');
+    }
+  }
+
   public async getActivityLogs(userId?: string, isCeo?: boolean): Promise<ActivityLog[]> {
-    const logs = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
+    await this.reconcileActivityLogs();
+    const logs = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, []);
+    logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     if (isCeo) {
       return logs;
     }
