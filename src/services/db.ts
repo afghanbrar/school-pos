@@ -46,15 +46,7 @@ const STORAGE_KEYS = {
   SUPABASE_KEY: 'school_pos_supabase_key',
 };
 
-export const isDummyTransaction = (t: any): boolean => {
-  if (!t) return false;
-  const id = String(t.id || '');
-  const inv = String(t.invoice_number || '');
-  const buyer = String(t.buyer_name || '').toLowerCase();
-  
-  if (id.startsWith('tx-100') || id.startsWith('tx-101') || id === 'tx-1786472069407') return true;
-  if (inv.startsWith('INV-2026-100') || inv.startsWith('INV-2026-101')) return true;
-  if (buyer.includes('beaconhouse') || buyer.includes('muhammad ali') || buyer.includes('test goverment')) return true;
+export const isDummyTransaction = (_t: any): boolean => {
   return false;
 };
 
@@ -497,22 +489,11 @@ class DatabaseService {
       // 4. Pull Transactions
       const { data: remoteTransactions, error: txErr } = await this.supabase.from('transactions').select('*');
       if (!txErr && remoteTransactions) {
-        // If any dummy transactions exist remotely, wipe them clean from Supabase in the background
-        const dummyFound = remoteTransactions.filter(t => isDummyTransaction(t));
-        if (dummyFound.length > 0) {
-          this.runBackgroundSync(async () => {
-            await this.supabase!.from('transactions').delete().neq('id', '___none___');
-          });
-        }
-
-        const validTx = remoteTransactions.filter(t => !isDummyTransaction(t));
         const localTx = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
         const txMap = new Map<string, Transaction>();
-        localTx.forEach(t => {
-          if (!isDummyTransaction(t)) txMap.set(t.id, t);
-        });
+        localTx.forEach(t => txMap.set(t.id, t));
 
-        validTx.forEach(t => {
+        remoteTransactions.forEach(t => {
           const existing = txMap.get(t.id);
           txMap.set(t.id, {
             id: t.id,
@@ -1229,11 +1210,18 @@ class DatabaseService {
     setItem(STORAGE_KEYS.CATEGORIES, categories);
     this.notify('categories');
 
+    const currentUser = this.getCurrentUser();
     void this.logActivity(
       'category_created',
       'Inventory Category Created',
-      `Created category "${newCategory.name}"`,
-      { category_id: newCategory.id, name: newCategory.name }
+      `Created category "${newCategory.name}" by ${currentUser?.full_name || 'Admin'}`,
+      { 
+        category_id: newCategory.id, 
+        name: newCategory.name,
+        staff_id: currentUser?.id,
+        staff_name: currentUser?.full_name
+      },
+      currentUser || undefined
     );
 
     return newCategory;
@@ -1310,11 +1298,21 @@ class DatabaseService {
     setItem(STORAGE_KEYS.PRODUCTS, products);
     this.notify('products');
 
+    const currentUser = this.getCurrentUser();
+    const performerName = newProduct.purchased_by || currentUser?.full_name || 'Staff Member';
     void this.logActivity(
       'product_added',
       'Inventory Stock Added',
-      `Added product "${newProduct.name}" (SKU: ${newProduct.sku}) • Wholesaler: ${newProduct.wholesaler_name || 'N/A'} • Qty: ${newProduct.quantity}`,
-      { product_id: newProduct.id, sku: newProduct.sku, wholesaler: newProduct.wholesaler_name, channel: newProduct.purchase_payment_channel }
+      `Added product "${newProduct.name}" (SKU: ${newProduct.sku}) by ${performerName} • Wholesaler: ${newProduct.wholesaler_name || 'N/A'} • Qty: ${newProduct.quantity}`,
+      { 
+        product_id: newProduct.id, 
+        sku: newProduct.sku, 
+        wholesaler: newProduct.wholesaler_name, 
+        channel: newProduct.purchase_payment_channel,
+        staff_id: currentUser?.id,
+        staff_name: performerName
+      },
+      currentUser || undefined
     );
 
     return newProduct;
@@ -1347,11 +1345,20 @@ class DatabaseService {
     setItem(STORAGE_KEYS.PRODUCTS, products);
     this.notify('products');
 
+    const currentUser = this.getCurrentUser();
     void this.logActivity(
       'product_updated',
       'Product Stock/Details Updated',
-      `Updated product "${updated.name}" (SKU: ${updated.sku}) • Stock: ${updated.quantity}`,
-      { product_id: id, sku: updated.sku, price: updated.sale_price, qty: updated.quantity }
+      `Updated product "${updated.name}" (SKU: ${updated.sku}) by ${currentUser?.full_name || 'Staff'} • Stock: ${updated.quantity}`,
+      { 
+        product_id: id, 
+        sku: updated.sku, 
+        price: updated.sale_price, 
+        qty: updated.quantity,
+        staff_id: currentUser?.id,
+        staff_name: currentUser?.full_name
+      },
+      currentUser || undefined
     );
 
     return updated;
@@ -1375,11 +1382,18 @@ class DatabaseService {
     this.notify('products');
 
     if (prod) {
+      const currentUser = this.getCurrentUser();
       void this.logActivity(
         'product_deleted',
         'Product Removed from Inventory',
-        `Deleted product "${prod.name}" (SKU: ${prod.sku})`,
-        { product_id: id, sku: prod.sku }
+        `Deleted product "${prod.name}" (SKU: ${prod.sku}) by ${currentUser?.full_name || 'Staff'}`,
+        { 
+          product_id: id, 
+          sku: prod.sku,
+          staff_id: currentUser?.id,
+          staff_name: currentUser?.full_name
+        },
+        currentUser || undefined
       );
     }
   }
@@ -1387,12 +1401,7 @@ class DatabaseService {
   /* ================= TRANSACTIONS (POS SALES) ================= */
 
   public async getTransactions(): Promise<Transaction[]> {
-    const txs = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
-    const clean = txs.filter(t => !isDummyTransaction(t));
-    if (clean.length !== txs.length) {
-      setItem(STORAGE_KEYS.TRANSACTIONS, clean);
-    }
-    return clean;
+    return getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
   }
 
   public async createTransaction(txData: Omit<Transaction, 'id' | 'invoice_number' | 'created_at'>): Promise<Transaction> {
@@ -1842,11 +1851,15 @@ class DatabaseService {
 
     // Correct any misattributed existing activity logs in-place
     for (const a of activities) {
-      const explicitStaffName = a.details?.staff_name || a.details?.staff;
-      if (explicitStaffName && typeof explicitStaffName === 'string' && explicitStaffName.trim() && a.user_name.toLowerCase().includes('ceo') && !explicitStaffName.toLowerCase().includes('ceo')) {
-        a.user_name = explicitStaffName.trim();
-        a.user_role = 'staff';
-        changed = true;
+      const explicitStaffName = a.details?.staff_name || a.details?.staff || a.details?.user_name;
+      if (explicitStaffName && typeof explicitStaffName === 'string' && explicitStaffName.trim()) {
+        const trimmed = explicitStaffName.trim();
+        if (a.user_name !== trimmed && !trimmed.toLowerCase().includes('ceo')) {
+          a.user_name = trimmed;
+          const matchedUser = users.find(u => u.id === a.details?.staff_id || u.full_name.toLowerCase() === trimmed.toLowerCase());
+          a.user_role = matchedUser?.role || 'staff';
+          changed = true;
+        }
       }
     }
 
@@ -2056,6 +2069,21 @@ class DatabaseService {
       });
     }
 
+    const currentUser = this.getCurrentUser();
+    void this.logActivity(
+      'profile_updated',
+      'Customer Profile Created',
+      `Registered ${newCustomer.type === 'student' ? 'Student' : 'Customer'} "${newCustomer.full_name}" by ${currentUser?.full_name || 'Staff'}`,
+      { 
+        customer_id: newCustomer.id, 
+        name: newCustomer.full_name,
+        type: newCustomer.type,
+        staff_id: currentUser?.id,
+        staff_name: currentUser?.full_name
+      },
+      currentUser || undefined
+    );
+
     return newCustomer;
   }
 
@@ -2160,11 +2188,19 @@ class DatabaseService {
     this.notify('transactions');
     this.notify('customers');
 
+    const currentUser = this.getCurrentUser();
     void this.logActivity(
       'sale_created',
       'Customer Dues Settled',
-      `Collected PKR ${totalSettled.toLocaleString()} pending dues for ${customer.full_name} via ${paymentMethod.toUpperCase()}`,
-      { customer: customer.full_name, settled: totalSettled, payment_method: paymentMethod }
+      `Collected PKR ${totalSettled.toLocaleString()} pending dues for ${customer.full_name} by ${currentUser?.full_name || 'Staff'} via ${paymentMethod.toUpperCase()}`,
+      { 
+        customer: customer.full_name, 
+        settled: totalSettled, 
+        payment_method: paymentMethod,
+        staff_id: currentUser?.id,
+        staff_name: currentUser?.full_name
+      },
+      currentUser || undefined
     );
 
     return totalSettled;

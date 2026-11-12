@@ -28,7 +28,7 @@ interface InventoryManagerProps {
 }
 
 export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) => {
-  const { user, isPrincipal } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -148,7 +148,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
       setWholesalerName(productToEdit.wholesaler_name || '');
       setWholesalerDetails(productToEdit.wholesaler_details || '');
       setPurchasePaymentChannel(productToEdit.purchase_payment_channel || 'Cash');
-      setPurchasedBy(productToEdit.purchased_by || (isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff')));
+      setPurchasedBy(productToEdit.purchased_by || user?.full_name || 'Inventory Staff');
     } else {
       setEditingProductId(null);
       setProdName('');
@@ -163,7 +163,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
       setWholesalerName('');
       setWholesalerDetails('');
       setPurchasePaymentChannel('Cash');
-      setPurchasedBy(isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff'));
+      setPurchasedBy(user?.full_name || 'Inventory Staff');
     }
     setIsProductModalOpen(true);
   };
@@ -195,7 +195,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ settings }) 
         wholesaler_name: wholesalerName.trim() || undefined,
         wholesaler_details: wholesalerDetails.trim() || undefined,
         purchase_payment_channel: purchasePaymentChannel.trim() || 'Cash',
-        purchased_by: purchasedBy.trim() || (isPrincipal ? 'CEO Office' : (user?.full_name || 'Staff')),
+        purchased_by: purchasedBy.trim() || user?.full_name || 'Inventory Staff',
       };
 
       setIsProductModalOpen(false);

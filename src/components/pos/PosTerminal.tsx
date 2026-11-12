@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Product, Category, CartItem, BuyerType, PaymentMethod, Transaction, SchoolSettings } from '../../types';
+import type { Product, Category, CartItem, BuyerType, PaymentMethod, Transaction, SchoolSettings, CustomerProfile, UserProfile } from '../../types';
 import { db } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -60,6 +60,14 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
   const [externalSchoolName, setExternalSchoolName] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Customer Autocomplete & Cashier Operator states
+  const [savedCustomers, setSavedCustomers] = useState<CustomerProfile[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [staffUsers, setStaffUsers] = useState<UserProfile[]>([]);
+  const [selectedCashierId, setSelectedCashierId] = useState<string>('');
+  const [showStudentDropdown, setShowStudentDropdown] = useState(false);
+  const [showExternalDropdown, setShowExternalDropdown] = useState(false);
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [discount, setDiscount] = useState<number>(0);
   const [receivedAmount, setReceivedAmount] = useState<string>('');
@@ -73,11 +81,20 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
   useEffect(() => {
     loadData();
     const unsub = db.subscribe(category => {
-      if (category === 'products' || category === 'categories' || category === 'all') {
+      if (category === 'products' || category === 'categories' || category === 'customers' || category === 'users' || category === 'transactions' || category === 'all') {
         loadData();
       }
     });
     return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setShowStudentDropdown(false);
+      setShowExternalDropdown(false);
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -112,9 +129,59 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
   const loadData = async () => {
     const prods = await db.getProducts();
     const cats = await db.getCategories();
+    const custs = await db.getCustomers();
+    const usrs = await db.getUsers();
+    const txs = await db.getTransactions();
     setProducts(prods);
     setCategories(cats);
+    setSavedCustomers(custs);
+    setStaffUsers(usrs);
+    setAllTransactions(txs);
   };
+
+  const getCustPendingDues = (cust: CustomerProfile): number => {
+    return allTransactions.filter(tx => {
+      const matchesName = tx.buyer_name.toLowerCase().trim() === cust.full_name.toLowerCase().trim();
+      const matchesRoll = Boolean(cust.roll_no && tx.student_roll_no && tx.student_roll_no.toLowerCase().trim() === cust.roll_no.toLowerCase().trim());
+      const matchesSchool = Boolean(cust.school_name && tx.school_name && tx.school_name.toLowerCase().trim() === cust.school_name.toLowerCase().trim());
+      return matchesName || matchesRoll || matchesSchool;
+    }).reduce((sum, tx) => sum + (tx.pending_amount || 0), 0);
+  };
+
+  const selectStudent = (c: CustomerProfile) => {
+    setStudentName(c.full_name);
+    if (c.roll_no) setRollNo(c.roll_no);
+    if (c.class_grade) setStudentClass(c.class_grade);
+    setShowStudentDropdown(false);
+  };
+
+  const selectExternal = (c: CustomerProfile) => {
+    setExternalSchoolName(c.full_name || c.school_name || '');
+    if (c.phone || c.email || c.address) {
+      const contactParts = [c.phone, c.address].filter(Boolean).join(' • ');
+      if (contactParts) setNotes(contactParts);
+    }
+    setShowExternalDropdown(false);
+  };
+
+  const matchingStudents = savedCustomers.filter(c => {
+    if (c.type !== 'student') return false;
+    const q = studentName.trim().toLowerCase();
+    if (!q) return false;
+    const matchName = c.full_name.toLowerCase().includes(q);
+    const matchRoll = Boolean(c.roll_no && c.roll_no.toLowerCase().includes(q));
+    const matchClass = Boolean(c.class_grade && c.class_grade.toLowerCase().includes(q));
+    return matchName || matchRoll || matchClass;
+  });
+
+  const matchingExternal = savedCustomers.filter(c => {
+    if (c.type !== 'external_school') return false;
+    const q = externalSchoolName.trim().toLowerCase();
+    if (!q) return false;
+    const matchName = c.full_name.toLowerCase().includes(q);
+    const matchSchool = Boolean(c.school_name && c.school_name.toLowerCase().includes(q));
+    return matchName || matchSchool;
+  });
 
   const filteredProducts = products.filter(product => {
     const matchesCat = selectedCategory === 'all' || product.category_id === selectedCategory;
@@ -225,14 +292,62 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
 
     setProcessing(true);
     try {
+      // 1. Auto-save student or external customer profile if not already present
+      if (buyerType === 'student' && studentName.trim()) {
+        const trimmedName = studentName.trim().toLowerCase();
+        const trimmedRoll = rollNo.trim().toLowerCase();
+        const exists = savedCustomers.some(c => 
+          c.type === 'student' && 
+          c.full_name.trim().toLowerCase() === trimmedName &&
+          (!trimmedRoll || !c.roll_no || c.roll_no.trim().toLowerCase() === trimmedRoll)
+        );
+        if (!exists) {
+          try {
+            const newCust = await db.createCustomer({
+              type: 'student',
+              full_name: studentName.trim(),
+              roll_no: rollNo.trim() || undefined,
+              class_grade: studentClass.trim() || undefined,
+            });
+            setSavedCustomers(prev => [newCust, ...prev]);
+          } catch (e) {
+            console.warn('Auto-save student notice:', e);
+          }
+        }
+      } else if (buyerType === 'external_school' && externalSchoolName.trim()) {
+        const trimmedName = externalSchoolName.trim().toLowerCase();
+        const exists = savedCustomers.some(c => 
+          c.type === 'external_school' && 
+          (c.full_name.trim().toLowerCase() === trimmedName || (c.school_name && c.school_name.trim().toLowerCase() === trimmedName))
+        );
+        if (!exists) {
+          try {
+            const newCust = await db.createCustomer({
+              type: 'external_school',
+              full_name: externalSchoolName.trim(),
+              school_name: externalSchoolName.trim(),
+              address: notes.trim() || undefined,
+            });
+            setSavedCustomers(prev => [newCust, ...prev]);
+          } catch (e) {
+            console.warn('Auto-save external customer notice:', e);
+          }
+        }
+      }
+
+      // 2. Resolve Active Cashier Operator
+      const activeStaff = staffUsers.find(u => u.id === selectedCashierId) || user;
+      const staffId = activeStaff?.id || user?.id || 'usr-staff-01';
+      const staffName = activeStaff?.full_name || user?.full_name || 'Staff Member';
+
       const transactionData: Omit<Transaction, 'id' | 'invoice_number' | 'created_at'> = {
         buyer_type: buyerType,
         buyer_name: buyerType === 'student' ? studentName.trim() : externalSchoolName.trim(),
         student_roll_no: buyerType === 'student' ? rollNo.trim() : undefined,
         student_class: buyerType === 'student' ? studentClass.trim() : undefined,
         school_name: buyerType === 'external_school' ? externalSchoolName.trim() : undefined,
-        staff_id: user?.id || 'usr-staff-01',
-        staff_name: user?.full_name || 'Staff Member',
+        staff_id: staffId,
+        staff_name: staffName,
         total_amount: subtotal,
         discount: discount,
         paid_amount: numericReceived,
@@ -253,7 +368,12 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
 
       const created = await db.createTransaction(transactionData);
       setCompletedTx(created);
-      showToast('success', 'Sale Completed', `Processed ${created.invoice_number} for ${created.buyer_name}.`);
+      
+      if (pendingDues > 0) {
+        showToast('success', 'Sale Processed & Dues Recorded', `Invoice ${created.invoice_number} saved. Remaining balance of ${currency} ${pendingDues.toLocaleString()} recorded to customer ledger.`);
+      } else {
+        showToast('success', 'Sale Completed', `Processed ${created.invoice_number} for ${created.buyer_name} by ${staffName}.`);
+      }
       
       setCart([]);
       setStudentName('');
@@ -263,6 +383,8 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
       setNotes('');
       setDiscount(0);
       setReceivedAmount('');
+      setShowStudentDropdown(false);
+      setShowExternalDropdown(false);
       await loadData();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to process transaction.');
@@ -559,6 +681,23 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
 
               {isBuyerDetailsOpen && (
                 <div className="p-2.5 pt-0 space-y-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                  {/* Cashier / Operator Indicator for CEO/Principal */}
+                  {(user?.role === 'ceo' || user?.role === 'principal') && staffUsers.length > 0 && (
+                    <div className="flex items-center justify-between text-xs py-1 px-1 bg-slate-100 dark:bg-slate-800/70 rounded-lg">
+                      <span className="text-[11px] font-semibold text-slate-500">Cashier:</span>
+                      <select
+                        value={selectedCashierId || user?.id}
+                        onChange={e => setSelectedCashierId(e.target.value)}
+                        className="text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-0.5 outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
+                      >
+                        <option value={user.id}>{user.full_name} ({user.role.toUpperCase()})</option>
+                        {staffUsers.filter(u => u.id !== user.id).map(u => (
+                          <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/80 dark:bg-slate-800 rounded-xl">
                     <button
                       type="button"
@@ -586,14 +725,45 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
 
                   {buyerType === 'student' ? (
                     <div className="grid grid-cols-2 gap-1.5 text-xs">
-                      <div className="col-span-2">
+                      <div className="col-span-2 relative" onClick={e => e.stopPropagation()}>
                         <input
                           type="text"
-                          placeholder="Student Name *"
+                          placeholder="Student Name * (Type to search saved)"
                           value={studentName}
-                          onChange={e => setStudentName(e.target.value)}
+                          onChange={e => {
+                            setStudentName(e.target.value);
+                            setShowStudentDropdown(true);
+                          }}
+                          onFocus={() => setShowStudentDropdown(true)}
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-emerald-500 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-medium"
                         />
+                        {showStudentDropdown && studentName.trim() && matchingStudents.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 py-1 divide-y divide-slate-100 dark:divide-slate-800">
+                            {matchingStudents.slice(0, 6).map(st => {
+                              const dues = getCustPendingDues(st);
+                              return (
+                                <button
+                                  key={st.id}
+                                  type="button"
+                                  onClick={() => selectStudent(st)}
+                                  className="w-full px-3 py-2 text-left hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-bold text-slate-800 dark:text-white">{st.full_name}</div>
+                                    <div className="text-[10px] text-slate-400">
+                                      {st.roll_no ? `Roll: ${st.roll_no}` : ''} {st.class_grade ? `• ${st.class_grade}` : ''}
+                                    </div>
+                                  </div>
+                                  {dues > 0 && (
+                                    <span className="text-[10px] font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                                      Due: {currency} {dues.toLocaleString()}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <input
@@ -616,13 +786,44 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({ settings }) => {
                     </div>
                   ) : (
                     <div className="space-y-1.5 text-xs">
-                      <input
-                        type="text"
-                        placeholder="External School / Org Name *"
-                        value={externalSchoolName}
-                        onChange={e => setExternalSchoolName(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-medium"
-                      />
+                      <div className="relative" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          placeholder="External School / Org Name * (Type to search saved)"
+                          value={externalSchoolName}
+                          onChange={e => {
+                            setExternalSchoolName(e.target.value);
+                            setShowExternalDropdown(true);
+                          }}
+                          onFocus={() => setShowExternalDropdown(true)}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-medium"
+                        />
+                        {showExternalDropdown && externalSchoolName.trim() && matchingExternal.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 py-1 divide-y divide-slate-100 dark:divide-slate-800">
+                            {matchingExternal.slice(0, 6).map(sc => {
+                              const dues = getCustPendingDues(sc);
+                              return (
+                                <button
+                                  key={sc.id}
+                                  type="button"
+                                  onClick={() => selectExternal(sc)}
+                                  className="w-full px-3 py-2 text-left hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-bold text-slate-800 dark:text-white">{sc.full_name}</div>
+                                    <div className="text-[10px] text-slate-400">{sc.school_name || sc.address || 'External Customer'}</div>
+                                  </div>
+                                  {dues > 0 && (
+                                    <span className="text-[10px] font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                                      Due: {currency} {dues.toLocaleString()}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                       <input
                         type="text"
                         placeholder="Contact Person / Ref Notes"

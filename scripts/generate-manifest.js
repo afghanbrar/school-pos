@@ -4,7 +4,7 @@ import path from 'path';
 // Read version from tauri.conf.json
 const tauriConfigPath = path.resolve('src-tauri/tauri.conf.json');
 const tauriConfig = JSON.parse(fs.readFileSync(tauriConfigPath, 'utf-8'));
-const version = tauriConfig.version || '1.0.12';
+const version = tauriConfig.version || '1.0.13';
 
 // Find sig file in nsis bundle matching current version
 const nsisDir = path.resolve('src-tauri/target/release/bundle/nsis');
@@ -32,7 +32,7 @@ const githubAsset = targetArtifact.replace(/ /g, '.');
 
 const manifest = {
   version: version,
-  notes: `School POS System Live Release v${version} - Migrated to new Supabase database, fixed activity log performers, live student customer cloud sync, and unified releases-pos updater support`,
+  notes: `School POS System Live Release v${version} - Customer/student search autocomplete in POS, automatic new buyer profile saving, pending dues tracking and settlement sync, corrected activity performer attribution, and permanent fix for disappearing sales`,
   pub_date: new Date().toISOString(),
   platforms: {
     'windows-x86_64': {
