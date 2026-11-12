@@ -37,7 +37,7 @@ const manifest = {
   platforms: {
     'windows-x86_64': {
       signature: sigContent,
-      url: `https://github.com/afghanbrar/releases-pos/releases/download/v${version}/${githubAsset}`
+      url: `https://github.com/afghanbrar/pos-releases/releases/download/v${version}/${githubAsset}`
     }
   }
 };
