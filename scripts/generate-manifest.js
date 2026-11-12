@@ -42,21 +42,14 @@ const manifest = {
   }
 };
 
-// 1. Generate school-updater.json (primary multi-project release updater)
+// 1. Generate school-updater.json (primary release updater)
 const outputUpdaterPath = path.join(nsisDir, 'school-updater.json');
 fs.writeFileSync(outputUpdaterPath, JSON.stringify(manifest, null, 2));
 
 const rootUpdaterPath = path.resolve('school-updater.json');
 fs.writeFileSync(rootUpdaterPath, JSON.stringify(manifest, null, 2));
 
-// 2. Also keep latest.json for backwards compatibility
-const outputNsisPath = path.join(nsisDir, 'latest.json');
-fs.writeFileSync(outputNsisPath, JSON.stringify(manifest, null, 2));
-
-const rootPath = path.resolve('latest.json');
-fs.writeFileSync(rootPath, JSON.stringify(manifest, null, 2));
-
-console.log(`✅ Successfully generated school-updater.json & latest.json for GitHub Release!`);
+console.log(`✅ Successfully generated school-updater.json for GitHub Release!`);
 console.log(`   - Saved to: ${outputUpdaterPath}`);
 console.log(`   - Saved to: ${rootUpdaterPath}`);
 console.log('\n📄 Manifest Content:');
@@ -66,4 +59,3 @@ console.log(`   1. Create release with Tag: v${version}`);
 console.log(`   2. Upload: ${targetArtifact}`);
 console.log(`   3. Upload: ${sigFile}`);
 console.log(`   4. Upload: school-updater.json`);
-console.log(`   5. Upload: latest.json`);

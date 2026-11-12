@@ -35,7 +35,7 @@ if (buildResult.status !== 0) {
   process.exit(buildResult.status || 1);
 }
 
-console.log('\n📦 Tauri build succeeded! Now generating release manifest school-updater.json & latest.json...');
+console.log('\n📦 Tauri build succeeded! Now generating release manifest school-updater.json...');
 const manifestResult = spawnSync('node', ['scripts/generate-manifest.js'], {
   stdio: 'inherit',
   shell: true,
