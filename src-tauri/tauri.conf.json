@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "School POS System",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "identifier": "com.schoolpos.app",
   "build": {
     "frontendDist": "../dist",
@@ -40,7 +40,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVCRkFBQTQ0RkNFNDA2M0IKUldRN0J1VDhSS3I2V3dJN1pHLzdCWFFOcHE1OGYrOGVpbDlvb1lLUWxNWjBRMmJtem15akgxZWkK",
       "endpoints": [
-        "https://github.com/afghanbrar/school-pos/releases/latest/download/latest.json"
+        "https://github.com/afghanbrar/releases-pos/releases/latest/download/school-updater.json",
+        "https://github.com/afghanbrar/school-pos/releases/latest/download/school-updater.json"
       ]
     }
   }

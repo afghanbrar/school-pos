@@ -4,7 +4,7 @@ import path from 'path';
 // Read version from tauri.conf.json
 const tauriConfigPath = path.resolve('src-tauri/tauri.conf.json');
 const tauriConfig = JSON.parse(fs.readFileSync(tauriConfigPath, 'utf-8'));
-const version = tauriConfig.version || '1.0.5';
+const version = tauriConfig.version || '1.0.12';
 
 // Find sig file in nsis bundle matching current version
 const nsisDir = path.resolve('src-tauri/target/release/bundle/nsis');
@@ -32,30 +32,38 @@ const githubAsset = targetArtifact.replace(/ /g, '.');
 
 const manifest = {
   version: version,
-  notes: `School POS System Live Release v${version} - Fixed Product Add Modal Centering & Internal Form Scroll, Global Real-Time Staff Audit & Activity Stream Reconciliation, Zero Data Loss`,
+  notes: `School POS System Live Release v${version} - Migrated to new Supabase database, fixed activity log performers, live student customer cloud sync, and unified releases-pos updater support`,
   pub_date: new Date().toISOString(),
   platforms: {
     'windows-x86_64': {
       signature: sigContent,
-      url: `https://github.com/afghanbrar/school-pos/releases/download/v${version}/${githubAsset}`
+      url: `https://github.com/afghanbrar/releases-pos/releases/download/v${version}/${githubAsset}`
     }
   }
 };
 
+// 1. Generate school-updater.json (primary multi-project release updater)
+const outputUpdaterPath = path.join(nsisDir, 'school-updater.json');
+fs.writeFileSync(outputUpdaterPath, JSON.stringify(manifest, null, 2));
+
+const rootUpdaterPath = path.resolve('school-updater.json');
+fs.writeFileSync(rootUpdaterPath, JSON.stringify(manifest, null, 2));
+
+// 2. Also keep latest.json for backwards compatibility
 const outputNsisPath = path.join(nsisDir, 'latest.json');
 fs.writeFileSync(outputNsisPath, JSON.stringify(manifest, null, 2));
 
-// Also write a copy to root for quick access
 const rootPath = path.resolve('latest.json');
 fs.writeFileSync(rootPath, JSON.stringify(manifest, null, 2));
 
-console.log(`✅ Successfully generated latest.json for GitHub Release!`);
-console.log(`   - Saved to: ${outputNsisPath}`);
-console.log(`   - Saved to: ${rootPath}`);
+console.log(`✅ Successfully generated school-updater.json & latest.json for GitHub Release!`);
+console.log(`   - Saved to: ${outputUpdaterPath}`);
+console.log(`   - Saved to: ${rootUpdaterPath}`);
 console.log('\n📄 Manifest Content:');
 console.log(JSON.stringify(manifest, null, 2));
 console.log(`\n📌 For GitHub Release:`);
 console.log(`   1. Create release with Tag: v${version}`);
 console.log(`   2. Upload: ${targetArtifact}`);
 console.log(`   3. Upload: ${sigFile}`);
-console.log(`   4. Upload: latest.json`);
+console.log(`   4. Upload: school-updater.json`);
+console.log(`   5. Upload: latest.json`);

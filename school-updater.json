@@ -1,0 +1,11 @@
+{
+  "version": "1.0.12",
+  "notes": "School POS System Live Release v1.0.12 - Migrated to new Supabase database, fixed activity log performers, live student customer cloud sync, and unified releases-pos updater support",
+  "pub_date": "2026-11-12T07:40:12.605Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRN0J1VDhSS3I2V3hDclgzazdyS0w1a09IYnVMY0RhU2NLSHZPU0g4ZitwalMydXJtVC9RZDBONFE0VWhkcGRGcjZUYkZKNmRheW5MdmdjdmhOeGNyK2xuV3h2RkJ4WWdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NDY5MjExCWZpbGU6U2Nob29sIFBPUyBTeXN0ZW1fMS4wLjEyX3g2NC1zZXR1cC5uc2lzLnppcApVbDFHb1o2WktQNy9KWUZ4cHFjQjd3WkVuKzB1aFkzRzBPaXRwNHNNSWFxd3J0Q3h0Ujk0dUlwUjZpSTV0WStUUFArSXNlUGdpSTcvWjF3bXllMDFEZz09Cg==",
+      "url": "https://github.com/afghanbrar/releases-pos/releases/download/v1.0.12/School.POS.System_1.0.12_x64-setup.nsis.zip"
+    }
+  }
+}

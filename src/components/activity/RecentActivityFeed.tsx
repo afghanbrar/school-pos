@@ -333,7 +333,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
                     </p>
 
                     <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-medium">
-                      <span>By: <strong className="text-slate-700 dark:text-slate-300">{log.user_name}</strong></span>
+                      <span>By: <strong className="text-slate-700 dark:text-slate-300">{log.details?.staff_name || log.details?.staff || log.user_name}</strong></span>
                       <span>•</span>
                       <span>{dateStr} at {timeAgo}</span>
                     </div>
@@ -390,7 +390,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = () => {
               <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs space-y-2">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Executing User:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{selectedActivity.user_name} ({formatRoleLabel(selectedActivity.user_role)})</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{selectedActivity.details?.staff_name || selectedActivity.details?.staff || selectedActivity.user_name} ({formatRoleLabel(selectedActivity.user_role)})</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Action Type:</span>

@@ -25,8 +25,8 @@ import {
   INITIAL_ACTIVITIES
 } from './mockData';
 
-const DEFAULT_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ektqwpnsqqnrukubnmiw.supabase.co';
-const DEFAULT_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrdHF3cG5zcXFucnVrdWJubWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NDUzNDMsImV4cCI6MjEwMTMyMTM0M30.WQTHB6qyn4Aah9zZlSfllqZCL5RHVzN1ZdCYFw0oMbA';
+const DEFAULT_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://hxbqqcefvzpycwgveuet.supabase.co';
+const DEFAULT_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4YnFxY2VmdnpweWN3Z3ZldWV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MDQ4MTEsImV4cCI6MjEwOTk4MDgxMX0.KrQG0C1H-TJsHG2kwQ-Y6nQ5R5ZXFkXXRhGXUCPtlbk';
 
 const STORAGE_KEYS = {
   USERS: 'school_pos_users_v4',
@@ -329,6 +329,14 @@ class DatabaseService {
     let url = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || DEFAULT_SUPABASE_URL;
     let key = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) || DEFAULT_SUPABASE_KEY;
 
+    // Purge deprecated/quota-restricted Supabase credentials
+    if (url && (url.includes('ektqwpnsqqnrukubnmiw') || !url.includes('hxbqqcefvzpycwgveuet'))) {
+      localStorage.removeItem(STORAGE_KEYS.SUPABASE_URL);
+      localStorage.removeItem(STORAGE_KEYS.SUPABASE_KEY);
+      url = DEFAULT_SUPABASE_URL;
+      key = DEFAULT_SUPABASE_KEY;
+    }
+
     if (url.endsWith('/rest/v1/')) {
       url = url.replace(/\/rest\/v1\/?$/, '');
     } else if (url.endsWith('/rest/v1')) {
@@ -515,6 +523,7 @@ class DatabaseService {
             student_class: t.student_class || undefined,
             school_name: t.school_name || undefined,
             staff_id: t.staff_id,
+            staff_name: t.staff_name || undefined,
             total_amount: Number(t.total_amount) || 0,
             discount: Number(t.discount) || 0,
             paid_amount: Number(t.paid_amount) || 0,
@@ -522,13 +531,36 @@ class DatabaseService {
             payment_method: t.payment_method,
             notes: t.notes || undefined,
             created_at: t.created_at,
-            items: existing?.items || [],
+            items: (Array.isArray(t.items) && t.items.length > 0) ? t.items : (existing?.items || []),
           });
         });
         setItem(STORAGE_KEYS.TRANSACTIONS, Array.from(txMap.values()));
       }
 
-      // 5. Pull Live Remote Activity Logs (if available)
+      // 5. Pull Customers (Students & External Institutions)
+      const { data: remoteCustomers, error: custErr } = await this.supabase.from('customers').select('*');
+      if (!custErr && remoteCustomers) {
+        const localCustomers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
+        const custMap = new Map<string, CustomerProfile>();
+        localCustomers.forEach(c => custMap.set(c.id, c));
+        remoteCustomers.forEach((c: any) => {
+          custMap.set(c.id, {
+            id: c.id,
+            type: c.type,
+            full_name: c.full_name,
+            roll_no: c.roll_no || undefined,
+            class_grade: c.class_grade || undefined,
+            school_name: c.school_name || undefined,
+            phone: c.phone || undefined,
+            email: c.email || undefined,
+            address: c.address || undefined,
+            created_at: c.created_at || new Date().toISOString(),
+          });
+        });
+        setItem(STORAGE_KEYS.CUSTOMERS, Array.from(custMap.values()));
+      }
+
+      // 6. Pull Live Remote Activity Logs (if available)
       if (this.supabase) {
         try {
           const { data: remoteLogs, error: logErr } = await this.supabase
@@ -655,11 +687,13 @@ class DatabaseService {
             student_class: tx.student_class || null,
             school_name: tx.school_name || null,
             staff_id: tx.staff_id || 'usr-staff-01',
+            staff_name: tx.staff_name || null,
             total_amount: tx.total_amount,
             discount: tx.discount,
             paid_amount: tx.paid_amount,
             pending_amount: tx.pending_amount,
             payment_method: tx.payment_method,
+            items: tx.items || [],
             notes: tx.notes || null,
             created_at: tx.created_at || new Date().toISOString(),
           }))
@@ -667,7 +701,28 @@ class DatabaseService {
         if (txErr) console.warn('Transactions Table sync:', txErr.message);
       }
 
-      // 5. Sync Expenses
+      // 5. Sync Customers (Students & External Institutions)
+      const customers = getItem<CustomerProfile[]>(STORAGE_KEYS.CUSTOMERS, []);
+      if (customers.length > 0) {
+        const { error: custErr } = await this.supabase.from('customers').upsert(
+          customers.map(c => ({
+            id: c.id,
+            type: c.type,
+            full_name: c.full_name,
+            roll_no: c.roll_no || null,
+            class_grade: c.class_grade || null,
+            school_name: c.school_name || null,
+            phone: c.phone || null,
+            email: c.email || null,
+            address: c.address || null,
+            created_at: c.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }))
+        );
+        if (custErr) console.warn('Customers Table sync:', custErr.message);
+      }
+
+      // 6. Sync Expenses
       const expenses = getItem<SchoolExpense[]>(STORAGE_KEYS.EXPENSES, []);
       if (expenses.length > 0) {
         const { error: expErr } = await this.supabase.from('expenses').upsert(
@@ -1377,11 +1432,13 @@ class DatabaseService {
           student_class: newTx.student_class || null,
           school_name: newTx.school_name || null,
           staff_id: newTx.staff_id,
+          staff_name: newTx.staff_name || null,
           total_amount: newTx.total_amount,
           discount: newTx.discount,
           paid_amount: newTx.paid_amount,
           pending_amount: newTx.pending_amount,
           payment_method: newTx.payment_method,
+          items: newTx.items || [],
           notes: newTx.notes || null,
           created_at: newTx.created_at,
         });
@@ -1399,18 +1456,24 @@ class DatabaseService {
       });
     }
 
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const staffUser = users.find(u => u.id === newTx.staff_id) || (newTx.staff_name ? { id: newTx.staff_id, full_name: newTx.staff_name, role: 'staff' as UserRole, email: '', status: 'active' as const, created_at: '' } : undefined);
+
     void this.logActivity(
       'sale_created',
       'New POS Sale Invoice Created',
-      `Processed ${newTx.invoice_number} for ${newTx.buyer_name} • Paid: PKR ${newTx.paid_amount.toLocaleString()} (${newTx.payment_method.toUpperCase()})`,
+      `Processed ${newTx.invoice_number} for ${newTx.buyer_name} by ${newTx.staff_name || 'Staff'} • Paid: PKR ${newTx.paid_amount.toLocaleString()} (${newTx.payment_method.toUpperCase()})`,
       { 
         invoice_number: newTx.invoice_number, 
         buyer: newTx.buyer_name, 
+        staff_id: newTx.staff_id,
+        staff_name: newTx.staff_name,
         total: newTx.total_amount, 
         paid: newTx.paid_amount,
         payment_method: newTx.payment_method,
         items_count: newTx.items.length 
-      }
+      },
+      staffUser
     );
 
     return newTx;
@@ -1474,6 +1537,9 @@ class DatabaseService {
       });
     }
 
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const staffUser = users.find(u => u.id === newExpense.staff_id) || { id: newExpense.staff_id, full_name: newExpense.staff_name, role: 'staff' as UserRole, email: '', status: 'active' as const, created_at: '' };
+
     void this.logActivity(
       'expense_logged',
       'School Expense Deducted',
@@ -1483,8 +1549,11 @@ class DatabaseService {
         amount: newExpense.amount, 
         category: newExpense.category, 
         receipt: newExpense.receipt_ref,
-        channel: newExpense.payment_channel 
-      }
+        channel: newExpense.payment_channel,
+        staff_id: newExpense.staff_id,
+        staff_name: newExpense.staff_name
+      },
+      staffUser
     );
 
     return newExpense;
@@ -1562,16 +1631,22 @@ class DatabaseService {
       });
     }
 
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const staffUser = users.find(u => u.id === newHandover.staff_id) || { id: newHandover.staff_id, full_name: newHandover.staff_name, role: 'staff' as UserRole, email: '', status: 'active' as const, created_at: '' };
+
     void this.logActivity(
       'handover_submitted',
       'Cash Handover Submitted to CEO',
       `${newHandover.staff_name} submitted balance handover ${newHandover.handover_code} with Net Cash of PKR ${newHandover.net_cash_submitted.toLocaleString()} for CEO approval`,
       { 
         handover_code: newHandover.handover_code, 
+        staff_id: newHandover.staff_id,
+        staff_name: newHandover.staff_name,
         net_cash: newHandover.net_cash_submitted,
         gross_sales: newHandover.total_gross_sales,
         expenses_deducted: newHandover.total_expenses_deducted
-      }
+      },
+      staffUser
     );
 
     return newHandover;
@@ -1763,21 +1838,37 @@ class DatabaseService {
 
     // C. Synthesize activity log for all transactions
     const transactions = getItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+
+    // Correct any misattributed existing activity logs in-place
+    for (const a of activities) {
+      const explicitStaffName = a.details?.staff_name || a.details?.staff;
+      if (explicitStaffName && typeof explicitStaffName === 'string' && explicitStaffName.trim() && a.user_name.toLowerCase().includes('ceo') && !explicitStaffName.toLowerCase().includes('ceo')) {
+        a.user_name = explicitStaffName.trim();
+        a.user_role = 'staff';
+        changed = true;
+      }
+    }
+
     for (const t of transactions) {
       const synthesizedId = `act-tx-${t.id}`;
       const exists = activities.some(a => a.id === synthesizedId || a.details?.invoice_number === t.invoice_number);
       if (!exists) {
+        const staffUser = users.find(u => u.id === t.staff_id);
+        const performerName = t.staff_name || staffUser?.full_name || 'Staff Member';
         activities.push({
           id: synthesizedId,
-          user_id: t.staff_id || 'usr-staff-01',
-          user_name: 'Cashier Staff',
-          user_role: 'staff',
+          user_id: t.staff_id || staffUser?.id || 'usr-staff-01',
+          user_name: performerName,
+          user_role: staffUser?.role || 'staff',
           action: 'sale_created',
           title: 'New POS Sale Invoice Created',
-          description: `Processed invoice ${t.invoice_number} for ${t.buyer_name} (${t.buyer_type}) • Total: PKR ${(t.total_amount || 0).toLocaleString()}`,
+          description: `Processed invoice ${t.invoice_number} for ${t.buyer_name} (${t.buyer_type}) by ${performerName} • Total: PKR ${(t.total_amount || 0).toLocaleString()}`,
           details: {
             invoice_number: t.invoice_number,
             buyer_name: t.buyer_name,
+            staff_id: t.staff_id,
+            staff_name: performerName,
             total_amount: t.total_amount,
             paid_amount: t.paid_amount,
             payment_method: t.payment_method,
@@ -1819,14 +1910,37 @@ class DatabaseService {
     details?: Record<string, any>,
     actingUser?: UserProfile
   ): Promise<ActivityLog> {
-    const currentUser = actingUser || this.getCurrentUser();
+    const users = getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    let resolvedUser: { id: string; full_name: string; role: UserRole } | null = actingUser || null;
+
+    if (!resolvedUser && details) {
+      const staffId = details.staff_id || details.user_id;
+      const staffName = details.staff_name || details.staff || details.user_name;
+
+      if (staffId) {
+        const found = users.find(u => u.id === staffId);
+        if (found) {
+          resolvedUser = found;
+        } else if (staffName) {
+          resolvedUser = { id: staffId, full_name: staffName, role: 'staff' };
+        }
+      } else if (staffName && typeof staffName === 'string' && !staffName.toLowerCase().includes('ceo')) {
+        const found = users.find(u => u.full_name.toLowerCase() === staffName.toLowerCase());
+        resolvedUser = found || { id: `usr-staff-${Date.now().toString().slice(-4)}`, full_name: staffName, role: 'staff' };
+      }
+    }
+
+    if (!resolvedUser) {
+      resolvedUser = this.getCurrentUser();
+    }
+
     const activities = getItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES);
 
     const newLog: ActivityLog = {
       id: `act-${Date.now()}`,
-      user_id: currentUser?.id || 'usr-system',
-      user_name: currentUser?.full_name || 'System Admin',
-      user_role: currentUser?.role || 'principal',
+      user_id: resolvedUser?.id || 'usr-system',
+      user_name: resolvedUser?.full_name || 'System Admin',
+      user_role: resolvedUser?.role || 'staff',
       action,
       title,
       description,
@@ -1926,13 +2040,18 @@ class DatabaseService {
 
     if (this.supabase) {
       this.runBackgroundSync(async () => {
-        await this.supabase!.from('profiles').upsert({
+        await this.supabase!.from('customers').upsert({
           id: newCustomer.id,
+          type: newCustomer.type,
           full_name: newCustomer.full_name,
-          email: newCustomer.email || `${newCustomer.id}@school.pos`,
-          role: 'staff',
-          status: 'active',
+          roll_no: newCustomer.roll_no || null,
+          class_grade: newCustomer.class_grade || null,
+          school_name: newCustomer.school_name || null,
+          phone: newCustomer.phone || null,
+          email: newCustomer.email || null,
+          address: newCustomer.address || null,
           created_at: newCustomer.created_at,
+          updated_at: newCustomer.created_at,
         });
       });
     }
@@ -1953,6 +2072,24 @@ class DatabaseService {
     customers[index] = updated;
     setItem(STORAGE_KEYS.CUSTOMERS, customers);
     this.notify('customers');
+
+    if (this.supabase) {
+      this.runBackgroundSync(async () => {
+        await this.supabase!.from('customers').upsert({
+          id: updated.id,
+          type: updated.type,
+          full_name: updated.full_name,
+          roll_no: updated.roll_no || null,
+          class_grade: updated.class_grade || null,
+          school_name: updated.school_name || null,
+          phone: updated.phone || null,
+          email: updated.email || null,
+          address: updated.address || null,
+          updated_at: new Date().toISOString(),
+        });
+      });
+    }
+
     return updated;
   }
 
@@ -1964,7 +2101,7 @@ class DatabaseService {
 
     if (this.supabase) {
       this.runBackgroundSync(async () => {
-        await this.supabase!.from('profiles').delete().eq('id', id);
+        await this.supabase!.from('customers').delete().eq('id', id);
       });
     }
   }
